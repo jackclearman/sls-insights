@@ -11,8 +11,17 @@ st.title("Legal Recruiting Dashboard - Q1 2025")
 def load_data():
     partner_url = "https://raw.githubusercontent.com/your-org/legal-dashboard-data/main/partner_moves_q1_2025.json"
     associate_url = "https://raw.githubusercontent.com/your-org/legal-dashboard-data/main/associate_moves_q1_2025.json"
-    partners = requests.get(partner_url).json()["data"]
-    associates = requests.get(associate_url).json()["data"]
+
+    partner_response = requests.get(partner_url)
+    associate_response = requests.get(associate_url)
+
+    try:
+        partners = partner_response.json()["data"]
+        associates = associate_response.json()["data"]
+    except json.JSONDecodeError:
+        st.error("Error loading data from GitHub. Please check that the JSON files are correctly formatted.")
+        st.stop()
+
     return partners, associates
 
 partners, associates = load_data()
