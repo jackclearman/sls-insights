@@ -1,14 +1,21 @@
 import streamlit as st
 import pandas as pd
 import json
-import matplotlib.pyplot as plt
 
 st.title("Legal Recruiting Dashboard - Q1 2025")
 
 # --- Load Data ---
-with open("partner_moves_q1_2025.json") as f:
-    data = json.load(f)["data"]
+@st.cache_data
+def load_data():
+    with open("partner_moves_q1_2025.json") as f:
+        partners = json.load(f)["data"]
+    with open("associate_moves_q1_2025.json") as f:
+        associates = json.load(f)["data"]
+    return partners, associates
 
+partners, associates = load_data()
+
+# --- Extract Function ---
 def extract(attorney):
     recent = attorney.get("recent_move") or {}
     move = recent.get("firm") or {}
@@ -22,10 +29,17 @@ def extract(attorney):
         "Graduation Year": attorney.get("graduation_year"),
         "Title": ", ".join(attorney.get("attorneys_titles", [])),
         "From Firm": move.get("old", {}).get("firm_name"),
-        "To Firm": move.get("new", {}).get("firm_name")
+        "To Firm": move.get("new", {}).get("firm_name"),
+        "FirmProspects ID": attorney.get("id"),
+        "Profile Link": f"[Link](https://engage.firmprospects.com/attorneys/profile/{attorney.get('id')})"
     }
 
-df = pd.DataFrame([extract(a) for a in data])
+# --- Selector ---
+role_type = st.radio("Select Attorney Type", ["Partners", "Associates"])
+if role_type == "Partners":
+    df = pd.DataFrame([extract(a) for a in partners])
+else:
+    df = pd.DataFrame([extract(a) for a in associates])
 
 # --- Tabs ---
 tab1, tab2, tab3, tab4 = st.tabs(["Top Firms", "Top Cities", "Practice Areas", "Experience"])
