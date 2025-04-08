@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit_authenticator as stauth
 
-# --- AUTH SETUP ---
+import streamlit_authenticator as stauth
+
 names = ['Legal Recruiter']
 usernames = ['recruiter']
-passwords = ['yourpassword123']
+passwords = ['slsinsights2025']
 hashed_passwords = stauth.Hasher(passwords).generate()
 
 authenticator = stauth.Authenticate(
