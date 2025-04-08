@@ -5,16 +5,24 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit_authenticator as stauth
 
+
 import streamlit_authenticator as stauth
 
 names = ['Legal Recruiter']
 usernames = ['recruiter']
-passwords = ['slsinsights2025']
+passwords = ['sls-insights']
+
+# Generate hashed passwords for deployment
 hashed_passwords = stauth.Hasher(passwords).generate()
 
+# ✅ CORRECT old-style argument order (no keyword!)
 authenticator = stauth.Authenticate(
-    names, usernames, hashed_passwords,
-    'dashboard_cookie', 'secret_key', cookie_expiry_days=1
+    names,
+    usernames,
+    hashed_passwords,
+    'dashboard_cookie',     # cookie_name
+    'secret_key',           # key
+    1                       # expiry_days (do NOT use keyword!)
 )
 
 name, authentication_status, username = authenticator.login('Login', 'main')
