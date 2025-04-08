@@ -35,32 +35,20 @@ def extract(attorney):
         "Profile Link": f"[Link](https://engage.firmprospects.com/attorneys/profile/{attorney.get('id')})"
     }
 
-# --- Main Selector ---
+# --- Main Role Selector ---
 role_type = st.radio("Select Attorney Type", ["Partners", "Associates"])
 
-# --- Summary Text & DataFrame ---
+# --- Summary + DataFrames ---
 if role_type == "Partners":
     st.markdown("### Partner Market Trends – Q1 2025 (Detailed Stats & Movers)")
-    st.markdown("""
-    Partner mobility remained strong in Q1 2025... *(summary trimmed for space)*
-    """)
+    st.markdown("*Partner summary goes here...*")
     df = pd.DataFrame([extract(a) for a in partners])
-    amlaw_df = pd.DataFrame([
-        extract(a) for a in partners
-        if (a.get("firm", {}).get("ranks", {}).get("top200") or 1000) <= 50
-    ])
 else:
     st.markdown("### Associate Market Trends – Q1 2025 (Detailed Stats & Movers)")
-    st.markdown("""
-    Associate lateral moves increased **18%** compared to Q4 2024... *(summary trimmed for space)*
-    """)
+    st.markdown("*Associate summary goes here...*")
     df = pd.DataFrame([extract(a) for a in associates])
-    amlaw_df = pd.DataFrame([
-        extract(a) for a in associates
-        if (a.get("firm", {}).get("ranks", {}).get("top200") or 1000) <= 50
-    ])
 
-# --- Tabs for Full Data ---
+# --- Tabs ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Top Firms", "Top Cities", "Practice Areas", "Experience", "Am Law 50"
 ])
@@ -90,6 +78,39 @@ with tab4:
     st.dataframe(df[df["Graduation Year"].notna()])
 
 with tab5:
-    st.subheader("Movers to Am Law 50 Firms")
-    st.write("Only attorneys who joined firms ranked 1–50 in the Am Law 200.")
-    st.dataframe(amlaw_df)
+    st.subheader("Am Law 50 Movers")
+
+    amlaw_type = st.selectbox("View Am Law 50 Moves For:", ["Partners", "Associates"])
+
+    if amlaw_type == "Partners":
+        source = partners
+    else:
+        source = associates
+
+    amlaw_df = pd.DataFrame([
+        extract(a) for a in source
+        if (a.get("firm", {}).get("ranks", {}).get("top200") or 1000) <= 50
+    ])
+
+    st.markdown(f"Showing attorneys who **joined firms ranked 1–50** in the Am Law 200 ({amlaw_type}).")
+
+    # Charts
+    st.markdown("#### Top Am Law 50 Destination Firms")
+    top_firms = amlaw_df["To Firm"].value_counts().head(10)
+    st.bar_chart(top_firms)
+    st.dataframe(amlaw_df[amlaw_df["To Firm"].isin(top_firms.index)])
+
+    st.markdown("#### Top Cities")
+    top_cities = amlaw_df["City"].value_counts().head(10)
+    st.bar_chart(top_cities)
+    st.dataframe(amlaw_df[amlaw_df["City"].isin(top_cities.index)])
+
+    st.markdown("#### Top Practice Areas")
+    exploded = amlaw_df.assign(Practice_Area=amlaw_df["Practice Areas"].str.split(", ")).explode("Practice_Area")
+    top_areas = exploded["Practice_Area"].value_counts().head(10)
+    st.bar_chart(top_areas)
+    st.dataframe(exploded[exploded["Practice_Area"].isin(top_areas.index)])
+
+    st.markdown("#### Graduation Year Distribution")
+    st.bar_chart(amlaw_df["Graduation Year"].dropna().value_counts().sort_index())
+    st.dataframe(amlaw_df[amlaw_df["Graduation Year"].notna()])
