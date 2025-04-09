@@ -5,33 +5,31 @@ import json
 st.set_page_config(page_title="Legal Recruiting Dashboard", layout="wide")
 st.title("Legal Recruiting Dashboard - Q1 2025")
 
-# --- Styling: Always-visible horizontal scrollbars ---
+# --- Styling: Force visible horizontal scrollbars on all tables ---
 st.markdown("""
     <style>
-    .dataframe-container {
-        overflow-x: auto !important;
-        scrollbar-width: auto !important;
-    }
-
-    .stDataFrame div[data-testid="stHorizontalBlock"] {
-        overflow-x: auto !important;
-    }
-
+    /* Show scrollbar always for horizontal tables */
     .stDataFrame div[data-testid="stDataFrameScrollableWrapper"] {
-        overflow-x: auto !important;
+        overflow-x: scroll !important;
     }
 
     .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar {
         height: 12px;
+        display: block !important;
     }
 
     .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar-thumb {
-        background: #888; 
+        background-color: #888;
         border-radius: 6px;
     }
 
     .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar-thumb:hover {
-        background: #555; 
+        background-color: #555;
+    }
+
+    .stDataFrame div[data-testid="stDataFrameScrollableWrapper"] {
+        scrollbar-width: auto;
+        scrollbar-color: #888 #222;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -69,7 +67,7 @@ def extract(attorney):
 # --- Main Role Selector ---
 role_type = st.radio("Select Attorney Type", ["Partners", "Associates"])
 
-# --- Summary + DataFrames ---
+# --- Summary + Base DataFrame ---
 if role_type == "Partners":
     st.markdown("### Partner Market Trends – Q1 2025 (Detailed Stats & Movers)")
     st.markdown("*Partner summary goes here...*")
