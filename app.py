@@ -5,67 +5,53 @@ import json
 st.set_page_config(page_title="Legal Recruiting Dashboard", layout="wide")
 st.title("Legal Recruiting Dashboard - Q1 2025")
 
-# --- Styling: Force visible horizontal scrollbars on all tables using multiple techniques ---
+# --- Styling: Force visible horizontal scrollbars on all tables ---
 st.markdown("""
     <style>
-    /* APPROACH 1: Force visible scrollbars by modifying the main container */
+    /* Force visible scrollbars at all times */
     .stDataFrame div[data-testid="stDataFrameScrollableWrapper"] {
         overflow-x: scroll !important;
-        overflow-y: hidden !important;
-        margin-bottom: 20px !important;
+        overflow-y: scroll !important;
+        scrollbar-width: auto !important;
+        scrollbar-color: rgba(136, 136, 136, 0.8) rgba(241, 241, 241, 0.8) !important;
     }
     
-    /* APPROACH 2: Force all scrollable elements to always display scrollbars */
+    /* Add pseudo-element to ensure scrollbar is always visible */
+    .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::after {
+        content: "";
+        display: block;
+        height: 1px;
+        width: 120%;  /* Force content to be wider than container */
+        position: absolute;
+        bottom: 0;
+        opacity: 0;
+        pointer-events: none;
+    }
+    
+    /* WebKit-based browsers (Chrome, Safari, Edge) */
     .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar {
-        height: 16px !important;
-        width: 16px !important;
+        height: 14px !important;
+        width: 14px !important;
         display: block !important;
-        background: #f0f2f6 !important;
+        background-color: rgba(241, 241, 241, 0.8) !important;
     }
     
     .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar-thumb {
-        background: #ccc !important;
-        border-radius: 8px !important;
-        border: 3px solid #f0f2f6 !important;
+        background-color: rgba(136, 136, 136, 0.8) !important;
+        border-radius: 7px !important;
+        border: 3px solid rgba(241, 241, 241, 0.8) !important;
+        min-height: 40px !important;
     }
     
-    .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar-track {
-        background: #f0f2f6 !important;
-    }
-    
-    /* APPROACH 3: Firefox-specific scrollbar styling */
-    .stDataFrame div[data-testid="stDataFrameScrollableWrapper"] {
-        scrollbar-width: auto !important;
-        scrollbar-color: #ccc #f0f2f6 !important;
-    }
-
-    /* APPROACH 4: Create fake scrollbar that's always visible underneath each table */
-    .stDataFrame {
-        position: relative !important;
-    }
-    
-    .stDataFrame::after {
-        content: "";
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 16px;
-        background: #f0f2f6;
-        border-radius: 8px;
-        box-shadow: inset 0 0 0 2px #f0f2f6, inset 0 0 0 8px #ccc;
-        margin: 0 4px 4px 4px;
-        z-index: 1000;
-    }
-    
-    /* APPROACH 5: Force overflow even when not needed */
+    /* Force all tables to be wider than their container */
     .stDataFrame table {
-        min-width: 150% !important;
+        min-width: 110% !important;
+        width: max-content !important;
     }
     
-    /* General enhancements */
+    /* Make sure scrollbar area is visible */
     .stDataFrame div[data-testid="stDataFrameScrollableContainer"] {
-        padding-bottom: 25px !important;  /* Make room for scrollbar */
+        padding-bottom: 16px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -113,16 +99,6 @@ else:
     st.markdown("*Associate summary goes here...*")
     df = pd.DataFrame([extract(a) for a in associates])
 
-# --- Custom function to display dataframes with always-visible scrollbars ---
-def display_df_with_scrollbar(dataframe):
-    # Force the table to be wider than needed to ensure scrollbar always shows
-    # Add extra empty columns if needed to ensure horizontal scrolling
-    if len(dataframe.columns) < 15:  # Arbitrary threshold
-        for i in range(5):  # Add some empty columns
-            dataframe[f"__empty_{i}"] = ""
-    
-    st.dataframe(dataframe, use_container_width=True)
-
 # --- Tabs ---
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Top Firms", "Top Cities", "Practice Areas", "Experience", "Am Law 50"
@@ -132,25 +108,25 @@ with tab1:
     st.subheader("Top Destination Firms")
     top_firms = df["To Firm"].value_counts().head(10)
     st.bar_chart(top_firms)
-    display_df_with_scrollbar(df[df["To Firm"].isin(top_firms.index)])
+    st.dataframe(df[df["To Firm"].isin(top_firms.index)], use_container_width=True)
 
 with tab2:
     st.subheader("Top Cities for Moves")
     top_cities = df["City"].value_counts().head(10)
     st.bar_chart(top_cities)
-    display_df_with_scrollbar(df[df["City"].isin(top_cities.index)])
+    st.dataframe(df[df["City"].isin(top_cities.index)], use_container_width=True)
 
 with tab3:
     st.subheader("Top Practice Areas")
     exploded = df.assign(Practice_Area=df["Practice Areas"].str.split(", ")).explode("Practice_Area")
     top_areas = exploded["Practice_Area"].value_counts().head(10)
     st.bar_chart(top_areas)
-    display_df_with_scrollbar(exploded[exploded["Practice_Area"].isin(top_areas.index)])
+    st.dataframe(exploded[exploded["Practice_Area"].isin(top_areas.index)], use_container_width=True)
 
 with tab4:
     st.subheader("Graduation Year Distribution")
     st.bar_chart(df["Graduation Year"].dropna().value_counts().sort_index())
-    display_df_with_scrollbar(df[df["Graduation Year"].notna()])
+    st.dataframe(df[df["Graduation Year"].notna()], use_container_width=True)
 
 with tab5:
     st.subheader("Am Law 50 Movers")
@@ -172,19 +148,19 @@ with tab5:
     st.markdown("#### Top Am Law 50 Destination Firms")
     top_firms = amlaw_df["To Firm"].value_counts().head(10)
     st.bar_chart(top_firms)
-    display_df_with_scrollbar(amlaw_df[amlaw_df["To Firm"].isin(top_firms.index)])
+    st.dataframe(amlaw_df[amlaw_df["To Firm"].isin(top_firms.index)], use_container_width=True)
 
     st.markdown("#### Top Cities")
     top_cities = amlaw_df["City"].value_counts().head(10)
     st.bar_chart(top_cities)
-    display_df_with_scrollbar(amlaw_df[amlaw_df["City"].isin(top_cities.index)])
+    st.dataframe(amlaw_df[amlaw_df["City"].isin(top_cities.index)], use_container_width=True)
 
     st.markdown("#### Top Practice Areas")
     exploded = amlaw_df.assign(Practice_Area=amlaw_df["Practice Areas"].str.split(", ")).explode("Practice_Area")
     top_areas = exploded["Practice_Area"].value_counts().head(10)
     st.bar_chart(top_areas)
-    display_df_with_scrollbar(exploded[exploded["Practice_Area"].isin(top_areas.index)])
+    st.dataframe(exploded[exploded["Practice_Area"].isin(top_areas.index)], use_container_width=True)
 
     st.markdown("#### Graduation Year Distribution")
     st.bar_chart(amlaw_df["Graduation Year"].dropna().value_counts().sort_index())
-    display_df_with_scrollbar(amlaw_df[amlaw_df["Graduation Year"].notna()])
+    st.dataframe(amlaw_df[amlaw_df["Graduation Year"].notna()], use_container_width=True)
