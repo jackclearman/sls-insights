@@ -5,6 +5,37 @@ import json
 st.set_page_config(page_title="Legal Recruiting Dashboard", layout="wide")
 st.title("Legal Recruiting Dashboard - Q1 2025")
 
+# --- Styling: Always-visible horizontal scrollbars ---
+st.markdown("""
+    <style>
+    .dataframe-container {
+        overflow-x: auto !important;
+        scrollbar-width: auto !important;
+    }
+
+    .stDataFrame div[data-testid="stHorizontalBlock"] {
+        overflow-x: auto !important;
+    }
+
+    .stDataFrame div[data-testid="stDataFrameScrollableWrapper"] {
+        overflow-x: auto !important;
+    }
+
+    .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar {
+        height: 12px;
+    }
+
+    .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar-thumb {
+        background: #888; 
+        border-radius: 6px;
+    }
+
+    .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar-thumb:hover {
+        background: #555; 
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- Load Data ---
 @st.cache_data
 def load_data():
@@ -57,25 +88,25 @@ with tab1:
     st.subheader("Top Destination Firms")
     top_firms = df["To Firm"].value_counts().head(10)
     st.bar_chart(top_firms)
-    st.dataframe(df[df["To Firm"].isin(top_firms.index)])
+    st.dataframe(df[df["To Firm"].isin(top_firms.index)], use_container_width=True)
 
 with tab2:
     st.subheader("Top Cities for Moves")
     top_cities = df["City"].value_counts().head(10)
     st.bar_chart(top_cities)
-    st.dataframe(df[df["City"].isin(top_cities.index)])
+    st.dataframe(df[df["City"].isin(top_cities.index)], use_container_width=True)
 
 with tab3:
     st.subheader("Top Practice Areas")
     exploded = df.assign(Practice_Area=df["Practice Areas"].str.split(", ")).explode("Practice_Area")
     top_areas = exploded["Practice_Area"].value_counts().head(10)
     st.bar_chart(top_areas)
-    st.dataframe(exploded[exploded["Practice_Area"].isin(top_areas.index)])
+    st.dataframe(exploded[exploded["Practice_Area"].isin(top_areas.index)], use_container_width=True)
 
 with tab4:
     st.subheader("Graduation Year Distribution")
     st.bar_chart(df["Graduation Year"].dropna().value_counts().sort_index())
-    st.dataframe(df[df["Graduation Year"].notna()])
+    st.dataframe(df[df["Graduation Year"].notna()], use_container_width=True)
 
 with tab5:
     st.subheader("Am Law 50 Movers")
@@ -94,23 +125,22 @@ with tab5:
 
     st.markdown(f"Showing attorneys who **joined firms ranked 1–50** in the Am Law 200 ({amlaw_type}).")
 
-    # Charts
     st.markdown("#### Top Am Law 50 Destination Firms")
     top_firms = amlaw_df["To Firm"].value_counts().head(10)
     st.bar_chart(top_firms)
-    st.dataframe(amlaw_df[amlaw_df["To Firm"].isin(top_firms.index)])
+    st.dataframe(amlaw_df[amlaw_df["To Firm"].isin(top_firms.index)], use_container_width=True)
 
     st.markdown("#### Top Cities")
     top_cities = amlaw_df["City"].value_counts().head(10)
     st.bar_chart(top_cities)
-    st.dataframe(amlaw_df[amlaw_df["City"].isin(top_cities.index)])
+    st.dataframe(amlaw_df[amlaw_df["City"].isin(top_cities.index)], use_container_width=True)
 
     st.markdown("#### Top Practice Areas")
     exploded = amlaw_df.assign(Practice_Area=amlaw_df["Practice Areas"].str.split(", ")).explode("Practice_Area")
     top_areas = exploded["Practice_Area"].value_counts().head(10)
     st.bar_chart(top_areas)
-    st.dataframe(exploded[exploded["Practice_Area"].isin(top_areas.index)])
+    st.dataframe(exploded[exploded["Practice_Area"].isin(top_areas.index)], use_container_width=True)
 
     st.markdown("#### Graduation Year Distribution")
     st.bar_chart(amlaw_df["Graduation Year"].dropna().value_counts().sort_index())
-    st.dataframe(amlaw_df[amlaw_df["Graduation Year"].notna()])
+    st.dataframe(amlaw_df[amlaw_df["Graduation Year"].notna()], use_container_width=True)
