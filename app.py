@@ -8,50 +8,28 @@ st.title("Legal Recruiting Dashboard - Q1 2025")
 # --- Styling: Force visible horizontal scrollbars on all tables ---
 st.markdown("""
     <style>
-    /* Force visible scrollbars at all times */
+    /* Show scrollbar always for horizontal tables */
     .stDataFrame div[data-testid="stDataFrameScrollableWrapper"] {
         overflow-x: scroll !important;
-        overflow-y: scroll !important;
-        scrollbar-width: auto !important;
-        scrollbar-color: rgba(136, 136, 136, 0.8) rgba(241, 241, 241, 0.8) !important;
     }
-    
-    /* Add pseudo-element to ensure scrollbar is always visible */
-    .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::after {
-        content: "";
-        display: block;
-        height: 1px;
-        width: 120%;  /* Force content to be wider than container */
-        position: absolute;
-        bottom: 0;
-        opacity: 0;
-        pointer-events: none;
-    }
-    
-    /* WebKit-based browsers (Chrome, Safari, Edge) */
+
     .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar {
-        height: 14px !important;
-        width: 14px !important;
+        height: 12px;
         display: block !important;
-        background-color: rgba(241, 241, 241, 0.8) !important;
     }
-    
+
     .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar-thumb {
-        background-color: rgba(136, 136, 136, 0.8) !important;
-        border-radius: 7px !important;
-        border: 3px solid rgba(241, 241, 241, 0.8) !important;
-        min-height: 40px !important;
+        background-color: #888;
+        border-radius: 6px;
     }
-    
-    /* Force all tables to be wider than their container */
-    .stDataFrame table {
-        min-width: 110% !important;
-        width: max-content !important;
+
+    .stDataFrame div[data-testid="stDataFrameScrollableWrapper"]::-webkit-scrollbar-thumb:hover {
+        background-color: #555;
     }
-    
-    /* Make sure scrollbar area is visible */
-    .stDataFrame div[data-testid="stDataFrameScrollableContainer"] {
-        padding-bottom: 16px !important;
+
+    .stDataFrame div[data-testid="stDataFrameScrollableWrapper"] {
+        scrollbar-width: auto;
+        scrollbar-color: #888 #222;
     }
     </style>
 """, unsafe_allow_html=True)
