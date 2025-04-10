@@ -55,7 +55,8 @@ with tab1:
         # Show the detailed attorney moves for reference
         st.subheader("Individual Attorney Moves to Top Firms")
         columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
-        st.dataframe(filtered_df[filtered_df["To Firm"].isin(top_firms.index)][columns_order], hide_index=True)
+        display_df = filtered_df[filtered_df["To Firm"].isin(top_firms.index.tolist())][columns_order]
+        st.dataframe(display_df, hide_index=True)
     else:
         # Get top departure firms and sort in descending order
         top_departure_firms = filtered_df["From Firm"].value_counts().head(10).sort_values(ascending=False)
@@ -108,7 +109,8 @@ with tab1:
         # Show the detailed attorney moves for reference
         st.subheader("Individual Attorney Departures from Top Firms")
         columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
-        st.dataframe(filtered_df[filtered_df["From Firm"].isin(top_departure_firms.index)][columns_order], hide_index=True)import streamlit as st
+        display_df = filtered_df[filtered_df["From Firm"].isin(top_departure_firms.index.tolist())][columns_order]
+        st.dataframe(display_df, hide_index=True)import streamlit as st
 import pandas as pd
 import json
 
@@ -379,7 +381,8 @@ with tab2:
     
     # Show attorneys in top cities with reordered columns
     columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
-    st.dataframe(filtered_df[filtered_df["City"].isin(top_cities.index)][columns_order], hide_index=True)
+    display_df = filtered_df[filtered_df["City"].isin(top_cities.index.tolist())][columns_order]
+    st.dataframe(display_df, hide_index=True)
 
 with tab3:
     # Get top practice areas and sort in descending order
@@ -409,7 +412,8 @@ with tab3:
     
     # Show attorneys in top practice areas with reordered columns
     columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
-    st.dataframe(exploded[exploded["Practice_Area"].isin(top_areas.index)][columns_order], hide_index=True)
+    display_df = exploded[exploded["Practice_Area"].isin(top_areas.index.tolist())][columns_order]
+    st.dataframe(display_df, hide_index=True)
 
 with tab4:
     # Get graduation year distribution
