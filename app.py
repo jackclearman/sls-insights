@@ -148,9 +148,9 @@ with tab1:
         else:
             st.info("No data available with current filters.")
         
-        # Create a summary table for top 20 destination firms
-        st.subheader("Top 20 Destination Firms - Detailed Analysis")
-        top_20_firms = filtered_df["To Firm"].value_counts().head(20).sort_values(ascending=False).index.tolist()
+        # Create a summary table for top 10 destination firms
+        st.subheader("Top 10 Destination Firms - Detailed Analysis")
+        top_20_firms = filtered_df["To Firm"].value_counts().head(10).sort_values(ascending=False).index.tolist()
         
         # Create a firm summary dataframe
         firm_summaries = []
@@ -185,7 +185,7 @@ with tab1:
             st.info("No summary data available with current filters.")
         
         # Show the detailed attorney moves for reference
-        st.subheader("Individual Attorney Moves to Top Firms")
+        st.subheader("Attorney Details (Moved to Top 10 Firms Above)")
         columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
         display_df = filtered_df[filtered_df["To Firm"].isin(top_firms.index.tolist())][columns_order] if not top_firms.empty else pd.DataFrame(columns=columns_order)
         if not display_df.empty:
@@ -223,9 +223,9 @@ with tab1:
         else:
             st.info("No data available with current filters.")
         
-        # Create a summary table for top 20 departure firms
-        st.subheader("Top 20 Departure Firms - Detailed Analysis")
-        top_20_departures = filtered_df["From Firm"].value_counts().head(20).sort_values(ascending=False).index.tolist()
+        # Create a summary table for top 10 departure firms
+        st.subheader("Attorney Details (Moved From Top 10 Firms Above)")
+        top_20_departures = filtered_df["From Firm"].value_counts().head(10).sort_values(ascending=False).index.tolist()
         
         # Create a firm summary dataframe
         departure_summaries = []
@@ -260,7 +260,7 @@ with tab1:
             st.info("No summary data available with current filters.")
         
         # Show the detailed attorney moves for reference
-        st.subheader("Individual Attorney Departures from Top Firms")
+        st.subheader("Attorneys who left top f Departures from Top Firms")
         columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
         display_df = filtered_df[filtered_df["From Firm"].isin(top_departure_firms.index.tolist())][columns_order] if not top_departure_firms.empty else pd.DataFrame(columns=columns_order)
         if not display_df.empty:
