@@ -105,10 +105,73 @@ filtered_df = apply_filters(df)
 tab1, tab2, tab3, tab4 = st.tabs(["Top Firms", "Top Cities", "Practice Areas", "Experience"])
 
 with tab1:
-    st.subheader("Top Destination Firms")
-    top_firms = filtered_df["To Firm"].value_counts().head(10)
-    st.bar_chart(top_firms)
-    st.dataframe(filtered_df[filtered_df["To Firm"].isin(top_firms.index)])
+    # Add dropdown to select between destination and departure firms
+    firm_view = st.selectbox("Select View", ["Top Destination Firms", "Top Departure Firms"], index=0)
+    
+    if firm_view == "Top Destination Firms":
+        st.subheader("Top Destination Firms")
+        top_firms = filtered_df["To Firm"].value_counts().head(10)
+        st.bar_chart(top_firms)
+        
+        # Create a summary table for top 20 destination firms
+        st.subheader("Top 20 Destination Firms - Detailed Analysis")
+        top_20_firms = filtered_df["To Firm"].value_counts().head(20).index.tolist()
+        
+        # Create a firm summary dataframe
+        firm_summaries = []
+        for firm in top_20_firms:
+            firm_data = filtered_df[filtered_df["To Firm"] == firm]
+            top_practice_areas = firm_data.assign(Practice_Area=firm_data["Practice Areas"].str.split(", ")).explode("Practice_Area")["Practice_Area"].value_counts().head(3).index.tolist()
+            
+            summary = {
+                "Firm": firm,
+                "Total Hires": len(firm_data),
+                "Top Source Firm": firm_data["From Firm"].value_counts().head(1).index.tolist()[0] if not firm_data["From Firm"].empty else "N/A",
+                "Top Practice Areas": ", ".join(top_practice_areas) if top_practice_areas else "N/A",
+                "Average Experience (Years)": 2025 - firm_data["Graduation Year"].mean() if not firm_data["Graduation Year"].empty else "N/A",
+                "Cities": ", ".join(firm_data["City"].unique()) if not firm_data["City"].empty else "N/A",
+                "Top Schools": ", ".join(firm_data["Law School"].value_counts().head(2).index.tolist()) if not firm_data["Law School"].empty else "N/A"
+            }
+            firm_summaries.append(summary)
+        
+        firm_summary_df = pd.DataFrame(firm_summaries)
+        st.dataframe(firm_summary_df, hide_index=True)
+        
+        # Show the detailed attorney moves for reference
+        st.subheader("Individual Attorney Moves to Top Firms")
+        st.dataframe(filtered_df[filtered_df["To Firm"].isin(top_firms.index)])
+    else:
+        st.subheader("Top Departure Firms")
+        top_departure_firms = filtered_df["From Firm"].value_counts().head(10)
+        st.bar_chart(top_departure_firms)
+        
+        # Create a summary table for top 20 departure firms
+        st.subheader("Top 20 Departure Firms - Detailed Analysis")
+        top_20_departures = filtered_df["From Firm"].value_counts().head(20).index.tolist()
+        
+        # Create a firm summary dataframe
+        departure_summaries = []
+        for firm in top_20_departures:
+            firm_data = filtered_df[filtered_df["From Firm"] == firm]
+            top_practice_areas = firm_data.assign(Practice_Area=firm_data["Practice Areas"].str.split(", ")).explode("Practice_Area")["Practice_Area"].value_counts().head(3).index.tolist()
+            
+            summary = {
+                "Firm": firm,
+                "Total Departures": len(firm_data),
+                "Top Destination Firm": firm_data["To Firm"].value_counts().head(1).index.tolist()[0] if not firm_data["To Firm"].empty else "N/A",
+                "Top Practice Areas Lost": ", ".join(top_practice_areas) if top_practice_areas else "N/A",
+                "Average Experience (Years)": 2025 - firm_data["Graduation Year"].mean() if not firm_data["Graduation Year"].empty else "N/A",
+                "Cities Affected": ", ".join(firm_data["City"].unique()) if not firm_data["City"].empty else "N/A",
+                "Schools of Departing Attorneys": ", ".join(firm_data["Law School"].value_counts().head(2).index.tolist()) if not firm_data["Law School"].empty else "N/A"
+            }
+            departure_summaries.append(summary)
+        
+        departure_summary_df = pd.DataFrame(departure_summaries)
+        st.dataframe(departure_summary_df, hide_index=True)
+        
+        # Show the detailed attorney moves for reference
+        st.subheader("Individual Attorney Departures from Top Firms")
+        st.dataframe(filtered_df[filtered_df["From Firm"].isin(top_departure_firms.index)])
 
 with tab2:
     st.subheader("Top Cities for Moves")
