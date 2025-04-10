@@ -51,7 +51,7 @@ role_type = st.radio("Select Attorney Type", ["Partners", "Associates"])
 if role_type == "Partners":
     df = pd.DataFrame([extract(a) for a in partners])
     st.markdown("""
-    ### Partner Market Trends – Q1 2025 (Detailed Stats & Movers)
+    ### Partner Market Trends – Q1 2025 (AI Summary)
 
     Partner mobility remained strong in Q1 2025, with **Orrick, Herrington & Sutcliffe LLP** emerging as one of the top destination firms, making three notable partner hires this quarter. One of the most high-profile moves was **Matt Nesburn**, a Chambers- and Legal 500-recognized project finance attorney with deep expertise in renewable energy. Nesburn joined Orrick from **A&O Shearman**, bringing with him extensive experience across solar, wind, and storage sectors, and a resume that includes deals with **SunPower**, **AES Clean Energy**, and **JERA North America**.
 
@@ -62,7 +62,7 @@ if role_type == "Partners":
 else:
     df = pd.DataFrame([extract(a) for a in associates])
     st.markdown("""
-    ### Associate Market Trends – Q1 2025 (Detailed Stats & Movers)
+    ### Associate Market Trends – Q1 2025 (AI Summary)
 
     Associate lateral moves increased **18%** compared to Q4 2024, with **litigation (43%)**, **labor and employment (29%)**, and **education law (13%)** making up the majority of practice areas. **Seyfarth Shaw LLP** stood out as both a top destination and source of associate movement, adding two experienced associates and losing one to a boutique competitor.
 
