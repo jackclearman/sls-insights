@@ -22,18 +22,18 @@ def extract(attorney):
     move = recent.get("firm") or {}
     return {
         "Name": f"{attorney.get('first_name', '')} {attorney.get('last_name', '')}",
-        "Current Firm": attorney.get("firm", {}).get("firm_name"),
-        "City": attorney.get("location", {}).get("city"),
-        "Practice Areas": ", ".join(attorney.get("attorneys_practice_areas", [])),
-        "Specialties": ", ".join(attorney.get("attorneys_specialties", [])),
-        "Law School": attorney.get("law_school", {}).get("law_school_name"),
-        "Graduation Year": attorney.get("graduation_year"),
-        "Title": ", ".join(attorney.get("attorneys_titles", [])),
         "From Firm": move.get("old", {}).get("firm_name"),
         "To Firm": move.get("new", {}).get("firm_name"),
+        "Practice Areas": ", ".join(attorney.get("attorneys_practice_areas", [])),
+        "Specialties": ", ".join(attorney.get("attorneys_specialties", [])),
+        "City": attorney.get("location", {}).get("city"),
+        "Graduation Year": attorney.get("graduation_year"),
+        "Law School": attorney.get("law_school", {}).get("law_school_name"),
+        "Current Firm": attorney.get("firm", {}).get("firm_name"),
+        "Title": ", ".join(attorney.get("attorneys_titles", [])),
         "FirmProspects ID": attorney.get("id"),
         "Profile Link": f"[Link](https://engage.firmprospects.com/attorneys/profile/{attorney.get('id')})",
-        "Am Law Ranking": attorney.get("firm", {}).get("am_law_ranking"),
+        "Am Law Ranking": attorney.get("firm", {}).get("rank", {}).get("top200"),
         "Region": attorney.get("location", {}).get("state")
     }
 
@@ -139,7 +139,8 @@ with tab1:
         
         # Show the detailed attorney moves for reference
         st.subheader("Individual Attorney Moves to Top Firms")
-        st.dataframe(filtered_df[filtered_df["To Firm"].isin(top_firms.index)])
+        columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
+        st.dataframe(filtered_df[filtered_df["To Firm"].isin(top_firms.index)][columns_order], hide_index=True)
     else:
         st.subheader("Top Departure Firms")
         top_departure_firms = filtered_df["From Firm"].value_counts().head(10)
@@ -171,22 +172,32 @@ with tab1:
         
         # Show the detailed attorney moves for reference
         st.subheader("Individual Attorney Departures from Top Firms")
-        st.dataframe(filtered_df[filtered_df["From Firm"].isin(top_departure_firms.index)])
+        columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
+        st.dataframe(filtered_df[filtered_df["From Firm"].isin(top_departure_firms.index)][columns_order], hide_index=True)
 
 with tab2:
     st.subheader("Top Cities for Moves")
     top_cities = filtered_df["City"].value_counts().head(10)
     st.bar_chart(top_cities)
-    st.dataframe(filtered_df[filtered_df["City"].isin(top_cities.index)])
+    
+    # Show attorneys in top cities with reordered columns
+    columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
+    st.dataframe(filtered_df[filtered_df["City"].isin(top_cities.index)][columns_order], hide_index=True)
 
 with tab3:
     st.subheader("Top Practice Areas")
     exploded = filtered_df.assign(Practice_Area=filtered_df["Practice Areas"].str.split(", ")).explode("Practice_Area")
     top_areas = exploded["Practice_Area"].value_counts().head(10)
     st.bar_chart(top_areas)
-    st.dataframe(exploded[exploded["Practice_Area"].isin(top_areas.index)])
+    
+    # Show attorneys in top practice areas with reordered columns
+    columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
+    st.dataframe(exploded[exploded["Practice_Area"].isin(top_areas.index)][columns_order], hide_index=True)
 
 with tab4:
     st.subheader("Graduation Year Distribution")
     st.bar_chart(filtered_df["Graduation Year"].dropna().value_counts().sort_index())
-    st.dataframe(filtered_df[filtered_df["Graduation Year"].notna()])
+    
+    # Show attorneys with graduation years with reordered columns
+    columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
+    st.dataframe(filtered_df[filtered_df["Graduation Year"].notna()][columns_order], hide_index=True)
