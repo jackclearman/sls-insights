@@ -4,7 +4,7 @@ import json
 import plotly.express as px
 
 st.set_page_config(page_title="Legal Recruiting Dashboard", layout="wide")
-st.title("Legal Recruiting Dashboard - Q1 2025")
+st.title("SLS Insights Dashboard - Q1 2025")
 
 # --- Load Data ---
 @st.cache_data
