@@ -109,8 +109,9 @@ with tab1:
     firm_view = st.selectbox("Select View", ["Top Destination Firms", "Top Departure Firms"], index=0)
     
     if firm_view == "Top Destination Firms":
-        st.subheader("Top Destination Firms")
-        top_firms = filtered_df["To Firm"].value_counts().head(10)
+        # Get top firms and sort in descending order
+        top_firms = filtered_df["To Firm"].value_counts().head(10).sort_values(ascending=False)
+        st.subheader(f"Top {len(top_firms)} Destination Firms")
         st.bar_chart(top_firms)
         
         # Create a summary table for top 20 destination firms
@@ -142,8 +143,9 @@ with tab1:
         columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
         st.dataframe(filtered_df[filtered_df["To Firm"].isin(top_firms.index)][columns_order], hide_index=True)
     else:
-        st.subheader("Top Departure Firms")
-        top_departure_firms = filtered_df["From Firm"].value_counts().head(10)
+        # Get top departure firms and sort in descending order
+        top_departure_firms = filtered_df["From Firm"].value_counts().head(10).sort_values(ascending=False)
+        st.subheader(f"Top {len(top_departure_firms)} Departure Firms")
         st.bar_chart(top_departure_firms)
         
         # Create a summary table for top 20 departure firms
@@ -176,8 +178,9 @@ with tab1:
         st.dataframe(filtered_df[filtered_df["From Firm"].isin(top_departure_firms.index)][columns_order], hide_index=True)
 
 with tab2:
-    st.subheader("Top Cities for Moves")
-    top_cities = filtered_df["City"].value_counts().head(10)
+    # Get top cities and sort in descending order
+    top_cities = filtered_df["City"].value_counts().head(10).sort_values(ascending=False)
+    st.subheader(f"Top {len(top_cities)} Cities for Moves")
     st.bar_chart(top_cities)
     
     # Show attorneys in top cities with reordered columns
@@ -185,9 +188,10 @@ with tab2:
     st.dataframe(filtered_df[filtered_df["City"].isin(top_cities.index)][columns_order], hide_index=True)
 
 with tab3:
-    st.subheader("Top Practice Areas")
+    # Get top practice areas and sort in descending order
     exploded = filtered_df.assign(Practice_Area=filtered_df["Practice Areas"].str.split(", ")).explode("Practice_Area")
-    top_areas = exploded["Practice_Area"].value_counts().head(10)
+    top_areas = exploded["Practice_Area"].value_counts().head(10).sort_values(ascending=False)
+    st.subheader(f"Top {len(top_areas)} Practice Areas")
     st.bar_chart(top_areas)
     
     # Show attorneys in top practice areas with reordered columns
@@ -195,8 +199,10 @@ with tab3:
     st.dataframe(exploded[exploded["Practice_Area"].isin(top_areas.index)][columns_order], hide_index=True)
 
 with tab4:
+    # Get graduation year distribution and sort appropriately
+    grad_years = filtered_df["Graduation Year"].dropna().value_counts().sort_index()
     st.subheader("Graduation Year Distribution")
-    st.bar_chart(filtered_df["Graduation Year"].dropna().value_counts().sort_index())
+    st.bar_chart(grad_years)
     
     # Show attorneys with graduation years with reordered columns
     columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
