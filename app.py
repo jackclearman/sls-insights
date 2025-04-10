@@ -21,6 +21,12 @@ partners, associates = load_data()
 def extract(attorney):
     recent = attorney.get("recent_move") or {}
     move = recent.get("firm") or {}
+    
+    # Get the proper AmLaw ranking from firm -> ranks -> top200
+    firm_data = attorney.get("firm", {})
+    ranks = firm_data.get("ranks", {})
+    am_law_ranking = ranks.get("top200")
+    
     return {
         "Name": f"{attorney.get('first_name', '')} {attorney.get('last_name', '')}",
         "From Firm": move.get("old", {}).get("firm_name"),
@@ -34,7 +40,7 @@ def extract(attorney):
         "Title": ", ".join(attorney.get("attorneys_titles", [])),
         "FirmProspects ID": attorney.get("id"),
         "Profile Link": f"[Link](https://engage.firmprospects.com/attorneys/profile/{attorney.get('id')})",
-        "Am Law Ranking": attorney.get("firm", {}).get("rank", {}).get("top200"),
+        "Am Law Ranking": am_law_ranking,
         "Region": attorney.get("location", {}).get("state")
     }
 
