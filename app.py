@@ -71,11 +71,22 @@ else:
     Over **55%** of associate movers had honors like Law Review or Super Lawyers Rising Star, and nearly **65%** were alumni of top 50 law schools. While national firms were still attractive, **61%** of associates moved to regional or boutique firms, often for greater autonomy, deeper specialization, or a better work-life balance.
     """)
 
+# --- Extract all unique practice areas for filter ---
+# First create a list of all practice areas
+all_practice_areas = []
+for practice_areas_str in df["Practice Areas"].dropna():
+    practice_areas = practice_areas_str.split(", ")
+    all_practice_areas.extend(practice_areas)
+
+# Convert to a set to get unique values, then sort and add "All Practice Areas" option
+unique_practice_areas = sorted(set(all_practice_areas))
+unique_practice_areas.insert(0, "All Practice Areas")
+
 # --- Create Filter Container ---
 filter_container = st.container()
 
 with filter_container:
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         # Am Law ranking filter
@@ -86,6 +97,10 @@ with filter_container:
         # Region filter
         region_options = ["California Only", "Washington Only", "All Regions"]
         region_filter = st.selectbox("Filter by Region", region_options, index=0)
+        
+    with col3:
+        # Practice area filter
+        practice_area_filter = st.selectbox("Filter by Practice Area", unique_practice_areas)
 
 # --- Apply Filters Function ---
 def apply_filters(dataframe):
@@ -104,6 +119,11 @@ def apply_filters(dataframe):
         filtered_df = filtered_df[filtered_df["Region"] == "California"]
     elif region_filter == "Washington Only":
         filtered_df = filtered_df[filtered_df["Region"] == "Washington"]
+    
+    # Apply Practice Area filter
+    if practice_area_filter != "All Practice Areas":
+        # Filter rows where the practice area string contains the selected practice area
+        filtered_df = filtered_df[filtered_df["Practice Areas"].str.contains(practice_area_filter, na=False)]
     
     return filtered_df
 
