@@ -2,73 +2,160 @@ import streamlit as st
 import pandas as pd
 import json
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, timedelta
+import requests
+import os
 
 st.set_page_config(page_title="Legal Recruiting Dashboard", layout="wide")
-st.title("SLS Insights Dashboard - Q1 2025")
+st.title("SLS Insights Dashboard")
 
-# --- Load Data ---
-@st.cache_data
-def load_data():
-    with open("partner_moves_q1_2025.json") as f:
-        partners = json.load(f)["data"]
-    with open("associate_moves_q1_2025.json") as f:
-        associates = json.load(f)["data"]
+# --- API Configuration ---
+JOBS_API_ENDPOINT = "https://developer.firmprospects.com/v1/jobs"
+ATTORNEYS_API_ENDPOINT = "https://developer.firmprospects.com/v1/attorneys"
+
+# Default time periods based on API requirements
+JOBS_DEFAULT_DAYS = 60
+ATTORNEYS_DEFAULT_DAYS = 180  # 6 months
+
+# --- Function to get API key from Streamlit secrets or environment ---
+def get_api_key():
+    # Try to get from Streamlit secrets (recommended for production)
     try:
-        with open("jobs_q1_2025.json") as f:
-            jobs = json.load(f)["data"]
+        return st.secrets["API_CREDENTIALS"]["X_AUTH_TOKEN"]
     except:
-        # If file doesn't exist, use the provided data
-        jobs_json = '''
-        {
-            "data": [
-                {
-                    "synced_at": "2025-04-09T02:55:34-04:00",
-                    "closedDate": "2017-04-27T18:49:33-04:00",
-                    "coordinates": "37.4889171,-122.2317477",
-                    "created": "2015-11-10T15:45:38-05:00",
-                    "firmId": 5424,
-                    "firmHeadquarter": "Redwood City, California",
-                    "firmName": "Gunderson Dettmer Stough Villeneuve Franklin & Hachigian LLP",
-                    "id": 1000000023,
-                    "inHouse": 0,
-                    "internationalFlag": 0,
-                    "jobLocation": ["California-Silicon Valley"],
-                    "primaryLocation": null,
-                    "jobTitle": "Corporate Fund Formation",
-                    "jobDescription": "Corporate Fund Formation: JD 2009 - 2014",
-                    "oldJobDescription": "Corporate Fund Formation Attorney : Any level.",
-                    "jobLink": "https://www.gunder.com/careers/career-opportunities-attorneys",
-                    "title": ["Associate"],
-                    "languages": null,
-                    "degrees": null,
-                    "maxYrs": 7,
-                    "minYrs": 2,
-                    "modified": "2017-04-27T18:49:33-04:00",
-                    "nonAttorneyFlag": 0,
-                    "postedDate": "2015-11-10T15:45:38-05:00",
-                    "practiceAreas": ["Corporate"],
-                    "specialty": ["Fund Formation"],
-                    "summer": null,
-                    "status": 0,
-                    "statusLabel": "Closed",
-                    "type": {"value": "law-firm", "label": "Law Firm"},
-                    "employmentType": [],
-                    "presence": null,
-                    "recruiter": "yes",
-                    "jobAlert": "on",
-                    "entity": "job",
-                    "salary": null,
-                    "locations": ["Silicon Valley, California"],
-                    "pageUrl": "https://engage.firmprospects.com/jobs/profile/1000000023",
-                    "_score": []
-                }
-            ]
-        }'''
-        jobs = json.loads(jobs_json)["data"]
-    return partners, associates, jobs
+        # Fallback to environment variable (for development)
+        token = os.environ.get("FIRMPROSPECTS_API_TOKEN")
+        if token:
+            return token
+        # For demo purposes - REMOVE IN PRODUCTION
+        return None  # You'll need to handle this case appropriately
 
-partners, associates, jobs = load_data()
+# --- Function to fetch jobs from the API ---
+@st.cache_data(ttl=24*3600)  # Cache data for 24 hours
+def fetch_jobs_from_api(days_range=30):
+    api_key = get_api_key()
+    if not api_key:
+        st.warning("⚠️ API key not found. Unable to fetch jobs data.")
+        return []
+        
+    headers = {
+        "X-AUTH-TOKEN": api_key,
+        "Content-Type": "application/json"
+    }
+    
+    # Calculate dates based on the selected time range
+    today = datetime.now().strftime("%Y-%m-%d")
+    start_date = (datetime.now() - timedelta(days=days_range)).strftime("%Y-%m-%d")
+    
+    # Create payload for associate jobs
+    associate_payload = {
+        "regions": {
+            "items": ["California","Washington-Seattle"],
+            "condition": "or",
+            "use_second_location": True
+        },
+        "posted_date": {
+            "min": start_date,
+            "max": today
+        },
+        "status": 1,
+        "titles": ["Associate"]
+    }
+    
+    # Create payload for partner jobs
+    partner_payload = {
+        "regions": {
+            "items": ["California","Washington-Seattle"],
+            "condition": "or",
+            "use_second_location": True
+        },
+        "posted_date": {
+            "min": start_date,
+            "max": today
+        },
+        "status": 1,
+        "titles": ["Partners"]
+    }
+    
+    all_jobs = []
+    
+    try:
+        # Make request for associate jobs
+        params = {"t": "", "page[limit]": 5000, "page[offset]": 0, "condition": "AND"}
+        associate_response = requests.post(JOBS_API_ENDPOINT, headers=headers, json=associate_payload, params=params)
+        associate_response.raise_for_status()
+        associate_jobs = associate_response.json().get("data", [])
+        all_jobs.extend(associate_jobs)
+        
+        # Make request for partner jobs
+        partner_response = requests.post(JOBS_API_ENDPOINT, headers=headers, json=partner_payload, params=params)
+        partner_response.raise_for_status()
+        partner_jobs = partner_response.json().get("data", [])
+        all_jobs.extend(partner_jobs)
+        
+        st.success(f"✅ Successfully fetched {len(all_jobs)} jobs from API!")
+        return all_jobs
+    
+    except Exception as e:
+        st.error(f"❌ Error fetching jobs from API: {str(e)}")
+        return []
+
+# --- Function to fetch attorney data from the API ---
+@st.cache_data(ttl=24*3600)  # Cache data for 24 hours
+def fetch_attorneys_from_api(attorney_type, days_range=30):
+    api_key = get_api_key()
+    if not api_key:
+        st.warning(f"⚠️ API key not found. Unable to fetch {attorney_type} data.")
+        return []
+        
+    headers = {
+        "X-AUTH-TOKEN": api_key,
+        "Content-Type": "application/json"
+    }
+    
+    # Calculate dates based on the selected time range
+    today = datetime.now().strftime("%Y-%m-%d")
+    start_date = (datetime.now() - timedelta(days=days_range)).strftime("%Y-%m-%d")
+    
+    # Set titles based on attorney type
+    titles = ["Associate"] if attorney_type == "associates" else ["Partner"]
+    
+    # Create API payload
+    payload = {
+        "regions": {
+            "items": ["California"],
+            "condition": "or",
+            "use_second_location": True
+        },
+        "last_move_date": {
+            "min": start_date,
+            "max": today
+        },
+        "titles": titles
+    }
+    
+    try:
+        # Make API request
+        params = {"t": "", "page[limit]": 5000, "page[offset]": 0, "condition": "AND"}
+        response = requests.post(ATTORNEYS_API_ENDPOINT, headers=headers, json=payload, params=params)
+        response.raise_for_status()
+        attorneys = response.json().get("data", [])
+        
+        st.success(f"✅ Successfully fetched {len(attorneys)} {attorney_type} from API!")
+        return attorneys
+    
+    except Exception as e:
+        st.error(f"❌ Error fetching {attorney_type} from API: {str(e)}")
+        return []
+
+# --- Function to load all data based on time period --- 
+def load_data(time_period_days):
+    # Fetch from API
+    partners = fetch_attorneys_from_api("partners", time_period_days)
+    associates = fetch_attorneys_from_api("associates", time_period_days)
+    jobs = fetch_jobs_from_api(time_period_days)
+    
+    return partners, associates, jobs
 
 # --- Extract Functions ---
 def extract_attorney(attorney):
@@ -94,7 +181,8 @@ def extract_attorney(attorney):
         "FirmProspects ID": attorney.get("id"),
         "Profile Link": f"[Link](https://engage.firmprospects.com/attorneys/profile/{attorney.get('id')})",
         "Am Law Ranking": am_law_ranking,
-        "Region": attorney.get("location", {}).get("state")
+        "Region": attorney.get("location", {}).get("state"),
+        "Move Date": recent.get("date")
     }
 
 def extract_job(job):
@@ -140,6 +228,24 @@ def extract_job(job):
         "Region": region
     }
 
+# --- Time Period Selector ---
+time_periods = {
+    "Last 60 days (Jobs)": 60,
+    "Last 90 days": 90,
+    "Last 6 months (Placements)": 180,
+    "Last year": 365
+}
+
+selected_time_period = st.selectbox(
+    "Select Time Period", 
+    options=list(time_periods.keys()),
+    index=0 if view_type == "Job Listings" else 2  # Default based on view type
+)
+time_period_days = time_periods[selected_time_period]
+
+# Load data based on selected time period
+partners, associates, jobs = load_data(time_period_days)
+
 # --- Main View Selector ---
 view_type = st.radio("Select View", ["Attorney Placements", "Job Listings"], horizontal=True)
 
@@ -150,40 +256,16 @@ if view_type == "Attorney Placements":
     # --- Create DataFrame ---
     if role_type == "Partners":
         df = pd.DataFrame([extract_attorney(a) for a in partners])
-        st.markdown("""
-        ### Partner Market Trends – Q1 2025 (AI Summary)
-
-        Partner mobility remained strong in Q1 2025, with **Orrick, Herrington & Sutcliffe LLP** emerging as one of the top destination firms, making three notable partner hires this quarter. One of the most high-profile moves was **Matt Nesburn**, a Chambers- and Legal 500-recognized project finance attorney with deep expertise in renewable energy. Nesburn joined Orrick from **A&O Shearman**, bringing with him extensive experience across solar, wind, and storage sectors, and a resume that includes deals with **SunPower**, **AES Clean Energy**, and **JERA North America**.
-
-        Other firms with significant activity included **Cleary Gottlieb**, which added two new partners, including **Justin "J.T." Ho**, a governance and ESG expert known for his work on shareholder activism and executive compensation. He previously held partner roles at Orrick and is a graduate of **UC Berkeley School of Law** with multiple recognitions, including Super Lawyers and The Legal 500's Next Generation Partner.
-
-        Overall, **68%** of partner moves were to Am Law 100 firms, and **42%** of those laterals specialized in corporate, energy, or project finance. **61%** of all movers had national or international honors such as **Chambers**, **Legal 500**, or **Super Lawyers**, and nearly **70%** graduated from top 20 law schools, with **UCLA**, **UC Berkeley**, and **Columbia** among the most frequent alma maters.
-        """)
     else:
         df = pd.DataFrame([extract_attorney(a) for a in associates])
-        st.markdown("""
-        ### Associate Market Trends – Q1 2025 (AI Summary)
-
-        Associate lateral moves increased **18%** compared to Q4 2024, with **litigation (43%)**, **labor and employment (29%)**, and **education law (13%)** making up the majority of practice areas. **Seyfarth Shaw LLP** stood out as both a top destination and source of associate movement, adding two experienced associates and losing one to a boutique competitor.
-
-        Among the standout movers was **Ryan Dyer**, who joined **Byrnes Keller Cromwell LLP**. A magna cum laude graduate of Seattle University School of Law and former Law Review editor, Dyer brought a strong background in commercial litigation and trial work. Another notable transition was **Daniel Culicover**, who moved from **Gordon & Rees** to **Seyfarth Shaw**. A cum laude graduate of American University's law program, Culicover has developed a niche in education law and administrative defense.
-
-        Over **55%** of associate movers had honors like Law Review or Super Lawyers Rising Star, and nearly **65%** were alumni of top 50 law schools. While national firms were still attractive, **61%** of associates moved to regional or boutique firms, often for greater autonomy, deeper specialization, or a better work-life balance.
-        """)
 else:  # Job Listings view
     # Process jobs data
     df = pd.DataFrame([extract_job(j) for j in jobs])
-    
-    # Add a summary for job listings
-    st.markdown("""
-    ### Job Market Trends – Q1 2025 (AI Summary)
-    
-    The legal job market in Q1 2025 showed strong demand across multiple practice areas, with **intellectual property** and **corporate** positions representing the largest segments. Among notable trends, **litigation** roles for junior attorneys (0-3 years) were particularly abundant in California markets.
-    
-    **Patent prosecution** remained a hot specialty area, with firms seeking both attorney and non-attorney professionals with technical backgrounds in electrical engineering, computer science, and life sciences. **Wilson Sonsini** and **Morrison & Foerster** posted several positions in their intellectual property groups across multiple offices.
-    
-    Experience requirements varied widely, with approximately **62%** of postings seeking candidates with 0-3 years of experience. Firms like **Gunderson Dettmer** continued their focus on **fund formation** specialists, while boutique firms showed increasing interest in labor and employment attorneys with class action experience.
-    """)
+
+# Ensure dataframe is not empty
+if df.empty:
+    st.warning(f"No data available for the selected criteria in the {selected_time_period}.")
+    st.stop()
 
 # --- Extract all unique practice areas for filter ---
 # First create a list of all practice areas
@@ -243,6 +325,11 @@ def apply_filters(dataframe):
 
 # Apply filters to dataframe
 filtered_df = apply_filters(df)
+
+# Check if filtered dataframe is empty
+if filtered_df.empty:
+    st.warning("No data available with the current filters. Try adjusting your filters.")
+    st.stop()
 
 # --- Tabs ---
 tab1, tab2, tab3, tab4 = st.tabs(["Top Firms", "Top Cities", "Practice Areas", "Experience"])
@@ -305,6 +392,269 @@ if view_type == "Attorney Placements":
                 
                 summary = {
                     "Firm": firm,
+                    "Total Hires": len(firm_data),
+                    "Top Source Firm": firm_data["From Firm"].value_counts().head(1).index.tolist()[0] if not firm_data["From Firm"].empty else "N/A",
+                    "Top Practice Areas": ", ".join(top_practice_areas) if top_practice_areas else "N/A",
+                    "Average Experience (Years)": avg_experience if avg_experience is not None else "N/A",
+                    "Cities": ", ".join(firm_data["City"].unique()) if not firm_data["City"].empty else "N/A",
+                    "Top Schools": ", ".join(firm_data["Law School"].value_counts().head(2).index.tolist()) if not firm_data["Law School"].empty else "N/A"
+                }
+                firm_summaries.append(summary)
+            
+            if firm_summaries:
+                firm_summary_df = pd.DataFrame(firm_summaries)
+                st.dataframe(firm_summary_df, hide_index=True)
+            else:
+                st.info("No summary data available with current filters.")
+            
+            # Show the detailed attorney moves for reference
+            st.subheader("Attorney Details (Moved to Top 10 Firms Above)")
+            columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "Move Date", "FirmProspects ID", "Profile Link"]
+            display_df = filtered_df[filtered_df["To Firm"].isin(top_firms.index.tolist())][columns_order] if not top_firms.empty else pd.DataFrame(columns=columns_order)
+            if not display_df.empty:
+                st.dataframe(display_df, hide_index=True)
+            else:
+                st.info("No detailed data available with current filters.")
+        else:
+            # Get top departure firms and sort in descending order
+            top_departure_firms = filtered_df["From Firm"].value_counts().head(10).sort_values(ascending=False)
+            st.subheader(f"Top {len(top_departure_firms)} Departure Firms")
+            
+            # Handle empty dataframe case
+            if len(top_departure_firms) > 0:
+                # Convert Series to DataFrame for plotly
+                plot_df = pd.DataFrame({'Firms': top_departure_firms.index, 'Count': top_departure_firms.values})
+                
+                # Create a bar chart with properly sorted values
+                fig = px.bar(
+                    plot_df,
+                    x='Firms',
+                    y='Count',
+                    labels={"Count": "Number of Attorneys", "Firms": ""}
+                )
+                
+                # Customize layout to disable interactivity but keep responsiveness
+                fig.update_layout(
+                    xaxis=dict(categoryorder='total descending'),
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    xaxis_fixedrange=True,
+                    yaxis_fixedrange=True
+                )
+                
+                # Render chart with container width responsiveness but disabled toolbar
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            else:
+                st.info("No data available with current filters.")
+            
+            # Create a summary table for top 10 departure firms
+            st.subheader("Top 10 Departure Firms - Detailed Analysis")
+            top_20_departures = filtered_df["From Firm"].value_counts().head(10).sort_values(ascending=False).index.tolist()
+            
+            # Create a firm summary dataframe
+            departure_summaries = []
+            for firm in top_20_departures:
+                firm_data = filtered_df[filtered_df["From Firm"] == firm]
+                practice_areas_df = firm_data.assign(Practice_Area=firm_data["Practice Areas"].str.split(", ")).explode("Practice_Area")
+                top_practice_areas = practice_areas_df["Practice_Area"].value_counts().head(3).index.tolist() if not practice_areas_df.empty else []
+                
+                # Safely calculate average with error handling
+                avg_experience = None
+                if not firm_data["Graduation Year"].empty and firm_data["Graduation Year"].notna().any():
+                    try:
+                        avg_experience = 2025 - firm_data["Graduation Year"].mean()
+                    except:
+                        avg_experience = None
+                
+                summary = {
+                    "Firm": firm,
+                    "Total Departures": len(firm_data),
+                    "Top Destination Firm": firm_data["To Firm"].value_counts().head(1).index.tolist()[0] if not firm_data["To Firm"].empty else "N/A",
+                    "Top Practice Areas Lost": ", ".join(top_practice_areas) if top_practice_areas else "N/A",
+                    "Average Experience (Years)": avg_experience if avg_experience is not None else "N/A",
+                    "Cities Affected": ", ".join(firm_data["City"].unique()) if not firm_data["City"].empty else "N/A",
+                    "Schools of Departing Attorneys": ", ".join(firm_data["Law School"].value_counts().head(2).index.tolist()) if not firm_data["Law School"].empty else "N/A"
+                }
+                departure_summaries.append(summary)
+            
+            if departure_summaries:
+                departure_summary_df = pd.DataFrame(departure_summaries)
+                st.dataframe(departure_summary_df, hide_index=True)
+            else:
+                st.info("No summary data available with current filters.")
+            
+            # Show the detailed attorney moves for reference
+            st.subheader("Attorney Details (Moved From Top 10 Firms Above)")
+            columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "Move Date", "FirmProspects ID", "Profile Link"]
+            display_df = filtered_df[filtered_df["From Firm"].isin(top_departure_firms.index.tolist())][columns_order] if not top_departure_firms.empty else pd.DataFrame(columns=columns_order)
+            if not display_df.empty:
+                st.dataframe(display_df, hide_index=True)
+            else:
+                st.info("No detailed data available with current filters.")
+    
+    with tab2:
+        # Get top cities and sort in descending order
+        top_cities = filtered_df["City"].value_counts().head(10).sort_values(ascending=False)
+        st.subheader(f"Top {len(top_cities)} Cities for Moves")
+        
+        # Handle empty dataframe case
+        if len(top_cities) > 0:
+            # Convert Series to DataFrame for plotly
+            plot_df = pd.DataFrame({'Cities': top_cities.index, 'Count': top_cities.values})
+            
+            # Create a bar chart with properly sorted values
+            fig = px.bar(
+                plot_df,
+                x='Cities',
+                y='Count',
+                labels={"Count": "Number of Attorneys", "Cities": ""}
+            )
+            
+            # Customize layout to disable interactivity but keep responsiveness
+            fig.update_layout(
+                xaxis=dict(categoryorder='total descending'),
+                margin=dict(t=10, b=10, l=10, r=10),
+                xaxis_fixedrange=True,
+                yaxis_fixedrange=True
+            )
+            
+            # Render chart with container width responsiveness but disabled toolbar
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("No data available with current filters.")
+        
+        # Show attorneys in top cities with reordered columns
+        columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "Move Date", "FirmProspects ID", "Profile Link"]
+        display_df = filtered_df[filtered_df["City"].isin(top_cities.index.tolist())][columns_order] if not top_cities.empty else pd.DataFrame(columns=columns_order)
+        if not display_df.empty:
+            st.dataframe(display_df, hide_index=True)
+        else:
+            st.info("No detailed data available with current filters.")
+    
+    with tab3:
+        # Get top practice areas and sort in descending order
+        exploded = filtered_df.assign(Practice_Area=filtered_df["Practice Areas"].str.split(", ")).explode("Practice_Area")
+        top_areas = exploded["Practice_Area"].value_counts().head(10).sort_values(ascending=False)
+        st.subheader(f"Top {len(top_areas)} Practice Areas")
+        
+        # Handle empty dataframe case
+        if len(top_areas) > 0:
+            # Convert Series to DataFrame for plotly
+            plot_df = pd.DataFrame({'Areas': top_areas.index, 'Count': top_areas.values})
+            
+            # Create a bar chart with properly sorted values
+            fig = px.bar(
+                plot_df,
+                x='Areas',
+                y='Count',
+                labels={"Count": "Number of Attorneys", "Areas": ""}
+            )
+            
+            # Customize layout to disable interactivity but keep responsiveness
+            fig.update_layout(
+                xaxis=dict(categoryorder='total descending'),
+                margin=dict(t=10, b=10, l=10, r=10),
+                xaxis_fixedrange=True,
+                yaxis_fixedrange=True
+            )
+            
+            # Render chart with container width responsiveness but disabled toolbar
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("No data available with current filters.")
+        
+        # Show attorneys in top practice areas with reordered columns
+        columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "Move Date", "FirmProspects ID", "Profile Link"]
+        display_df = exploded[exploded["Practice_Area"].isin(top_areas.index.tolist())][columns_order] if not top_areas.empty else pd.DataFrame(columns=columns_order)
+        if not display_df.empty:
+            st.dataframe(display_df, hide_index=True)
+        else:
+            st.info("No detailed data available with current filters.")
+    
+    with tab4:
+        # Get graduation year distribution
+        grad_years_series = filtered_df["Graduation Year"].dropna().value_counts().sort_index()
+        st.subheader("Graduation Year Distribution")
+        
+        # Handle empty dataframe case
+        if len(grad_years_series) > 0:
+            # Convert Series to DataFrame for plotly
+            plot_df = pd.DataFrame({'Year': grad_years_series.index.astype(str), 'Count': grad_years_series.values})
+            
+            # Create a bar chart for graduation years
+            fig = px.bar(
+                plot_df,
+                x='Year',
+                y='Count',
+                labels={"Count": "Number of Attorneys", "Year": "Graduation Year"}
+            )
+            
+            # Customize layout - note: we keep chronological order for years
+            fig.update_layout(
+                margin=dict(t=10, b=10, l=10, r=10),
+                xaxis_fixedrange=True,
+                yaxis_fixedrange=True
+            )
+            
+            # Render chart with container width responsiveness but disabled toolbar
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("No data available with current filters.")
+        
+        # Show attorneys with graduation years with reordered columns
+        columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "Move Date", "FirmProspects ID", "Profile Link"]
+        display_df = filtered_df[filtered_df["Graduation Year"].notna()][columns_order]
+        if not display_df.empty:
+            st.dataframe(display_df, hide_index=True)
+        else:
+            st.info("No detailed data available with current filters.")
+else:  # Job Listings view
+    with tab1:
+        # Get top firms and sort in descending order
+        top_firms = filtered_df["Firm"].value_counts().head(10).sort_values(ascending=False)
+        st.subheader(f"Top {len(top_firms)} Hiring Firms")
+        
+        # Handle empty dataframe case
+        if len(top_firms) > 0:
+            # Convert Series to DataFrame for plotly
+            plot_df = pd.DataFrame({'Firms': top_firms.index, 'Count': top_firms.values})
+            
+            # Create a bar chart with properly sorted values
+            fig = px.bar(
+                plot_df,
+                x='Firms',
+                y='Count',
+                labels={"Count": "Number of Job Listings", "Firms": ""}
+            )
+            
+            # Customize layout to disable interactivity but keep responsiveness
+            fig.update_layout(
+                xaxis=dict(categoryorder='total descending'),
+                margin=dict(t=10, b=10, l=10, r=10),
+                xaxis_fixedrange=True,
+                yaxis_fixedrange=True
+            )
+            
+            # Render chart with container width responsiveness but disabled toolbar
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("No data available with current filters.")
+        
+        # Create a summary table for top 10 hiring firms
+        st.subheader("Top 10 Hiring Firms - Detailed Analysis")
+        top_20_firms = filtered_df["Firm"].value_counts().head(10).sort_values(ascending=False).index.tolist()
+        
+        # Create a firm summary dataframe
+        firm_summaries = []
+        for firm in top_20_firms:
+            firm_data = filtered_df[filtered_df["Firm"] == firm]
+            practice_areas_df = firm_data.assign(Practice_Area=firm_data["Practice Areas"].str.split(", ")).explode("Practice_Area")
+            top_practice_areas = practice_areas_df["Practice_Area"].value_counts().head(3).index.tolist() if not practice_areas_df.empty else []
+            
+            # Get top job types
+            top_job_types = firm_data["Job Type"].value_counts().head(2).index.tolist() if not firm_data["Job Type"].empty else []
+            
+            summary = {
+                "Firm": firm,
                 "Total Openings": len(firm_data),
                 "Top Practice Areas Hiring": ", ".join(top_practice_areas) if top_practice_areas else "N/A",
                 "Most Common Job Types": ", ".join(top_job_types) if top_job_types else "N/A",
@@ -462,266 +812,3 @@ if view_type == "Attorney Placements":
             st.dataframe(display_df, hide_index=True)
         else:
             st.info("No detailed data available with current filters.")
-                    "Total Hires": len(firm_data),
-                    "Top Source Firm": firm_data["From Firm"].value_counts().head(1).index.tolist()[0] if not firm_data["From Firm"].empty else "N/A",
-                    "Top Practice Areas": ", ".join(top_practice_areas) if top_practice_areas else "N/A",
-                    "Average Experience (Years)": avg_experience if avg_experience is not None else "N/A",
-                    "Cities": ", ".join(firm_data["City"].unique()) if not firm_data["City"].empty else "N/A",
-                    "Top Schools": ", ".join(firm_data["Law School"].value_counts().head(2).index.tolist()) if not firm_data["Law School"].empty else "N/A"
-                }
-                firm_summaries.append(summary)
-            
-            if firm_summaries:
-                firm_summary_df = pd.DataFrame(firm_summaries)
-                st.dataframe(firm_summary_df, hide_index=True)
-            else:
-                st.info("No summary data available with current filters.")
-            
-            # Show the detailed attorney moves for reference
-            st.subheader("Attorney Details (Moved to Top 10 Firms Above)")
-            columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
-            display_df = filtered_df[filtered_df["To Firm"].isin(top_firms.index.tolist())][columns_order] if not top_firms.empty else pd.DataFrame(columns=columns_order)
-            if not display_df.empty:
-                st.dataframe(display_df, hide_index=True)
-            else:
-                st.info("No detailed data available with current filters.")
-        else:
-            # Get top departure firms and sort in descending order
-            top_departure_firms = filtered_df["From Firm"].value_counts().head(10).sort_values(ascending=False)
-            st.subheader(f"Top {len(top_departure_firms)} Departure Firms")
-            
-            # Handle empty dataframe case
-            if len(top_departure_firms) > 0:
-                # Convert Series to DataFrame for plotly
-                plot_df = pd.DataFrame({'Firms': top_departure_firms.index, 'Count': top_departure_firms.values})
-                
-                # Create a bar chart with properly sorted values
-                fig = px.bar(
-                    plot_df,
-                    x='Firms',
-                    y='Count',
-                    labels={"Count": "Number of Attorneys", "Firms": ""}
-                )
-                
-                # Customize layout to disable interactivity but keep responsiveness
-                fig.update_layout(
-                    xaxis=dict(categoryorder='total descending'),
-                    margin=dict(t=10, b=10, l=10, r=10),
-                    xaxis_fixedrange=True,
-                    yaxis_fixedrange=True
-                )
-                
-                # Render chart with container width responsiveness but disabled toolbar
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-            else:
-                st.info("No data available with current filters.")
-            
-            # Create a summary table for top 10 departure firms
-            st.subheader("Top 10 Destination Firms - Detailed Analysis")
-            top_20_departures = filtered_df["From Firm"].value_counts().head(10).sort_values(ascending=False).index.tolist()
-            
-            # Create a firm summary dataframe
-            departure_summaries = []
-            for firm in top_20_departures:
-                firm_data = filtered_df[filtered_df["From Firm"] == firm]
-                practice_areas_df = firm_data.assign(Practice_Area=firm_data["Practice Areas"].str.split(", ")).explode("Practice_Area")
-                top_practice_areas = practice_areas_df["Practice_Area"].value_counts().head(3).index.tolist() if not practice_areas_df.empty else []
-                
-                # Safely calculate average with error handling
-                avg_experience = None
-                if not firm_data["Graduation Year"].empty and firm_data["Graduation Year"].notna().any():
-                    try:
-                        avg_experience = 2025 - firm_data["Graduation Year"].mean()
-                    except:
-                        avg_experience = None
-                
-                summary = {
-                    "Firm": firm,
-                    "Total Departures": len(firm_data),
-                    "Top Destination Firm": firm_data["To Firm"].value_counts().head(1).index.tolist()[0] if not firm_data["To Firm"].empty else "N/A",
-                    "Top Practice Areas Lost": ", ".join(top_practice_areas) if top_practice_areas else "N/A",
-                    "Average Experience (Years)": avg_experience if avg_experience is not None else "N/A",
-                    "Cities Affected": ", ".join(firm_data["City"].unique()) if not firm_data["City"].empty else "N/A",
-                    "Schools of Departing Attorneys": ", ".join(firm_data["Law School"].value_counts().head(2).index.tolist()) if not firm_data["Law School"].empty else "N/A"
-                }
-                departure_summaries.append(summary)
-            
-            if departure_summaries:
-                departure_summary_df = pd.DataFrame(departure_summaries)
-                st.dataframe(departure_summary_df, hide_index=True)
-            else:
-                st.info("No summary data available with current filters.")
-            
-            # Show the detailed attorney moves for reference
-            st.subheader("Attorney Details (Moved From Top 10 Firms Above)")
-            columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
-            display_df = filtered_df[filtered_df["From Firm"].isin(top_departure_firms.index.tolist())][columns_order] if not top_departure_firms.empty else pd.DataFrame(columns=columns_order)
-            if not display_df.empty:
-                st.dataframe(display_df, hide_index=True)
-            else:
-                st.info("No detailed data available with current filters.")
-    
-    with tab2:
-        # Get top cities and sort in descending order
-        top_cities = filtered_df["City"].value_counts().head(10).sort_values(ascending=False)
-        st.subheader(f"Top {len(top_cities)} Cities for Moves")
-        
-        # Handle empty dataframe case
-        if len(top_cities) > 0:
-            # Convert Series to DataFrame for plotly
-            plot_df = pd.DataFrame({'Cities': top_cities.index, 'Count': top_cities.values})
-            
-            # Create a bar chart with properly sorted values
-            fig = px.bar(
-                plot_df,
-                x='Cities',
-                y='Count',
-                labels={"Count": "Number of Attorneys", "Cities": ""}
-            )
-            
-            # Customize layout to disable interactivity but keep responsiveness
-            fig.update_layout(
-                xaxis=dict(categoryorder='total descending'),
-                margin=dict(t=10, b=10, l=10, r=10),
-                xaxis_fixedrange=True,
-                yaxis_fixedrange=True
-            )
-            
-            # Render chart with container width responsiveness but disabled toolbar
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.info("No data available with current filters.")
-        
-        # Show attorneys in top cities with reordered columns
-        columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
-        display_df = filtered_df[filtered_df["City"].isin(top_cities.index.tolist())][columns_order] if not top_cities.empty else pd.DataFrame(columns=columns_order)
-        if not display_df.empty:
-            st.dataframe(display_df, hide_index=True)
-        else:
-            st.info("No detailed data available with current filters.")
-    
-    with tab3:
-        # Get top practice areas and sort in descending order
-        exploded = filtered_df.assign(Practice_Area=filtered_df["Practice Areas"].str.split(", ")).explode("Practice_Area")
-        top_areas = exploded["Practice_Area"].value_counts().head(10).sort_values(ascending=False)
-        st.subheader(f"Top {len(top_areas)} Practice Areas")
-        
-        # Handle empty dataframe case
-        if len(top_areas) > 0:
-            # Convert Series to DataFrame for plotly
-            plot_df = pd.DataFrame({'Areas': top_areas.index, 'Count': top_areas.values})
-            
-            # Create a bar chart with properly sorted values
-            fig = px.bar(
-                plot_df,
-                x='Areas',
-                y='Count',
-                labels={"Count": "Number of Attorneys", "Areas": ""}
-            )
-            
-            # Customize layout to disable interactivity but keep responsiveness
-            fig.update_layout(
-                xaxis=dict(categoryorder='total descending'),
-                margin=dict(t=10, b=10, l=10, r=10),
-                xaxis_fixedrange=True,
-                yaxis_fixedrange=True
-            )
-            
-            # Render chart with container width responsiveness but disabled toolbar
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.info("No data available with current filters.")
-        
-        # Show attorneys in top practice areas with reordered columns
-        columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
-        display_df = exploded[exploded["Practice_Area"].isin(top_areas.index.tolist())][columns_order] if not top_areas.empty else pd.DataFrame(columns=columns_order)
-        if not display_df.empty:
-            st.dataframe(display_df, hide_index=True)
-        else:
-            st.info("No detailed data available with current filters.")
-    
-    with tab4:
-        # Get graduation year distribution
-        grad_years_series = filtered_df["Graduation Year"].dropna().value_counts().sort_index()
-        st.subheader("Graduation Year Distribution")
-        
-        # Handle empty dataframe case
-        if len(grad_years_series) > 0:
-            # Convert Series to DataFrame for plotly
-            plot_df = pd.DataFrame({'Year': grad_years_series.index.astype(str), 'Count': grad_years_series.values})
-            
-            # Create a bar chart for graduation years
-            fig = px.bar(
-                plot_df,
-                x='Year',
-                y='Count',
-                labels={"Count": "Number of Attorneys", "Year": "Graduation Year"}
-            )
-            
-            # Customize layout - note: we keep chronological order for years
-            fig.update_layout(
-                margin=dict(t=10, b=10, l=10, r=10),
-                xaxis_fixedrange=True,
-                yaxis_fixedrange=True
-            )
-            
-            # Render chart with container width responsiveness but disabled toolbar
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.info("No data available with current filters.")
-        
-        # Show attorneys with graduation years with reordered columns
-        columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "Specialties", "City", "Graduation Year", "Law School", "Current Firm", "Title", "FirmProspects ID", "Profile Link"]
-        display_df = filtered_df[filtered_df["Graduation Year"].notna()][columns_order]
-        if not display_df.empty:
-            st.dataframe(display_df, hide_index=True)
-        else:
-            st.info("No detailed data available with current filters.")
-else:  # Job Listings view
-    with tab1:
-        # Get top firms and sort in descending order
-        top_firms = filtered_df["Firm"].value_counts().head(10).sort_values(ascending=False)
-        st.subheader(f"Top {len(top_firms)} Hiring Firms")
-        
-        # Handle empty dataframe case
-        if len(top_firms) > 0:
-            # Convert Series to DataFrame for plotly
-            plot_df = pd.DataFrame({'Firms': top_firms.index, 'Count': top_firms.values})
-            
-            # Create a bar chart with properly sorted values
-            fig = px.bar(
-                plot_df,
-                x='Firms',
-                y='Count',
-                labels={"Count": "Number of Job Listings", "Firms": ""}
-            )
-            
-            # Customize layout to disable interactivity but keep responsiveness
-            fig.update_layout(
-                xaxis=dict(categoryorder='total descending'),
-                margin=dict(t=10, b=10, l=10, r=10),
-                xaxis_fixedrange=True,
-                yaxis_fixedrange=True
-            )
-            
-            # Render chart with container width responsiveness but disabled toolbar
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.info("No data available with current filters.")
-        
-        # Create a summary table for top 10 hiring firms
-        st.subheader("Top 10 Hiring Firms - Detailed Analysis")
-        top_20_firms = filtered_df["Firm"].value_counts().head(10).sort_values(ascending=False).index.tolist()
-        
-        # Create a firm summary dataframe
-        firm_summaries = []
-        for firm in top_20_firms:
-            firm_data = filtered_df[filtered_df["Firm"] == firm]
-            practice_areas_df = firm_data.assign(Practice_Area=firm_data["Practice Areas"].str.split(", ")).explode("Practice_Area")
-            top_practice_areas = practice_areas_df["Practice_Area"].value_counts().head(3).index.tolist() if not practice_areas_df.empty else []
-            
-            # Get top job types
-            top_job_types = firm_data["Job Type"].value_counts().head(2).index.tolist() if not firm_data["Job Type"].empty else []
-            
-            summary = {
-                "Firm": firm,
