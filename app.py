@@ -55,7 +55,7 @@ def fetch_jobs_from_api(days_range=30):
             "max": today
         },
         "status": 1,
-        "titles": ["Associate"]
+        "title": ["Associate"]
     }
     
     # Create payload for partner jobs
@@ -70,7 +70,7 @@ def fetch_jobs_from_api(days_range=30):
             "max": today
         },
         "status": 1,
-        "titles": ["Partners"]
+        "title": ["Partners"]
     }
     
     all_jobs = []
