@@ -216,7 +216,7 @@ def extract_job(job):
 
 # --- Main UI Section ---
 # Create tabs for the main views
-tab_labels = ["Attorney Placements", "Job Listings"]
+tab_labels = ["Job Listings", "Attorney Placements"]
 main_tabs = st.tabs(tab_labels)
 
 # Specific processing for Attorney Placements tab
