@@ -390,13 +390,140 @@ with main_tabs[0]:  # Attorney Placements tab
             
             # Additional tabs implementation for attorneys (simplified for brevity)
             with attorney_tabs[1]:  # Top Cities
-                st.write("Top Cities visualization will go here")
+                st.subheader("Top Cities for Attorney Movements")
                 
+                # Get the top cities with attorney movements
+                top_cities = filtered_attorney_df["City"].value_counts().head(10).sort_values(ascending=False)
+                
+                if len(top_cities) > 0:
+                    # Convert Series to DataFrame for plotting
+                    city_df = pd.DataFrame({"Cities": top_cities.index, "Count": top_cities.values})
+                    
+                    # Create a horizontal bar chart
+                    fig = px.bar(
+                        city_df,
+                        y="Cities",
+                        x="Count",
+                        orientation='h',
+                        labels={"Count": "Number of Attorneys", "Cities": ""},
+                        color_discrete_sequence=['#3366cc']
+                    )
+                    
+                    # Customize layout
+                    fig.update_layout(
+                        yaxis=dict(categoryorder='total ascending'),
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        xaxis_fixedrange=True,
+                        yaxis_fixedrange=True
+                    )
+                    
+                    # Render chart
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                    
+                    # Show table of attorneys by city
+                    st.subheader("Attorney Details by City")
+                    city_columns = ["Name", "From Firm", "To Firm", "Practice Areas", "City", "Move Date"]
+                    city_df_details = filtered_attorney_df[filtered_attorney_df["City"].isin(top_cities.index.tolist())][city_columns]
+                    if not city_df_details.empty:
+                        st.dataframe(city_df_details, hide_index=True)
+                else:
+                    st.info("No city data available with current filters.")
+            
+            # --- For the Practice Areas tab ---
             with attorney_tabs[2]:  # Practice Areas
-                st.write("Practice Areas visualization will go here")
+                st.subheader("Top Practice Areas")
                 
+                # Process practice areas (they're comma-separated in the dataframe)
+                all_areas = []
+                for areas in filtered_attorney_df["Practice Areas"].dropna():
+                    all_areas.extend([area.strip() for area in areas.split(",")])
+                
+                # Count occurrences and get top practice areas
+                practice_counts = pd.Series(all_areas).value_counts().head(10)
+                
+                if len(practice_counts) > 0:
+                    # Convert to DataFrame for plotting
+                    practice_df = pd.DataFrame({"Practice Area": practice_counts.index, "Count": practice_counts.values})
+                    
+                    # Create pie chart for practice areas
+                    fig = px.pie(
+                        practice_df, 
+                        values="Count", 
+                        names="Practice Area",
+                        hole=0.4,  # Create a donut chart
+                        color_discrete_sequence=px.colors.qualitative.Set3
+                    )
+                    
+                    # Update layout
+                    fig.update_layout(
+                        margin=dict(t=0, b=0, l=20, r=20),
+                        legend=dict(orientation="h", yanchor="bottom", y=-0.2)
+                    )
+                    
+                    # Render chart
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                    
+                    # Show table view too
+                    st.subheader("Practice Area Distribution")
+                    st.dataframe(practice_df, hide_index=True)
+                else:
+                    st.info("No practice area data available with current filters.")
+            
+            # --- For the Experience tab ---
             with attorney_tabs[3]:  # Experience
-                st.write("Experience visualization will go here")
+                st.subheader("Attorney Experience Distribution")
+                
+                # Calculate years since graduation to estimate experience level
+                current_year = datetime.now().year
+                
+                # Clean and convert graduation year to numeric
+                filtered_attorney_df["Graduation Year"] = pd.to_numeric(filtered_attorney_df["Graduation Year"], errors="coerce")
+                
+                # Calculate experience for attorneys with valid graduation years
+                valid_exp_df = filtered_attorney_df.dropna(subset=["Graduation Year"])
+                valid_exp_df["Experience"] = current_year - valid_exp_df["Graduation Year"]
+                
+                if not valid_exp_df.empty:
+                    # Create experience bins
+                    bins = [0, 3, 5, 8, 10, 15, 20, 50]
+                    labels = ["0-3 years", "3-5 years", "5-8 years", "8-10 years", "10-15 years", "15-20 years", "20+ years"]
+                    
+                    valid_exp_df["Experience Bracket"] = pd.cut(valid_exp_df["Experience"], bins=bins, labels=labels, right=False)
+                    
+                    # Count attorneys in each experience bracket
+                    exp_counts = valid_exp_df["Experience Bracket"].value_counts().sort_index()
+                    
+                    # Create DataFrame for plotting
+                    exp_df = pd.DataFrame({"Experience": exp_counts.index, "Number of Attorneys": exp_counts.values})
+                    
+                    # Create a bar chart
+                    fig = px.bar(
+                        exp_df,
+                        x="Experience",
+                        y="Number of Attorneys",
+                        labels={"Number of Attorneys": "Count", "Experience": "Years of Experience"},
+                        color_discrete_sequence=['#2ca02c']
+                    )
+                    
+                    # Update layout
+                    fig.update_layout(
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        xaxis_fixedrange=True,
+                        yaxis_fixedrange=True
+                    )
+                    
+                    # Render chart
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                    
+                    # Show table with attorney details by experience
+                    st.subheader("Attorney Details by Experience")
+                    exp_columns = ["Name", "From Firm", "To Firm", "Practice Areas", "Graduation Year", "Experience", "Experience Bracket"]
+                    exp_df_details = valid_exp_df[exp_columns].sort_values("Experience", ascending=False)
+                    if not exp_df_details.empty:
+                        st.dataframe(exp_df_details, hide_index=True)
+                else:
+                    st.info("No experience data available with current filters.")
+
 
 # Specific processing for Job Listings tab
 with main_tabs[1]:  # Job Listings tab
