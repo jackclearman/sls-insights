@@ -89,7 +89,6 @@ def fetch_jobs_from_api(days_range=30):
         partner_jobs = partner_response.json().get("data", [])
         all_jobs.extend(partner_jobs)
         
-        st.success(f"✅ Successfully fetched {len(all_jobs)} jobs from API!")
         return all_jobs
     
     except Exception as e:
@@ -136,7 +135,6 @@ def fetch_attorneys_from_api(attorney_type, days_range=90):
         response.raise_for_status()
         attorneys = response.json().get("data", [])
         
-        st.success(f"✅ Successfully fetched {len(attorneys)} {attorney_type} from API!")
         return attorneys
     
     except Exception as e:
@@ -216,8 +214,7 @@ def extract_job(job):
 
 # --- Main UI Section ---
 # Create tabs for the main views
-# Create tabs for the main views
-tab_labels = ["Job Postings","Attorney Placements"]
+tab_labels = ["Job Listings", "Attorney Placements"]
 main_tabs = st.tabs(tab_labels)
 
 # Specific processing for Job Listings tab (first tab)
@@ -236,10 +233,12 @@ with main_tabs[0]:  # Job Listings tab
     # Add job type toggle similar to attorney type
     job_type = st.radio("Select Job Type", ["Associates", "Partners"], horizontal=True)
     
-    # Load job data - with proper job label
+    # Load job data
     job_data = fetch_jobs_from_api(job_time_period_days)
+    
+    # Display simple count text without the green highlight
     if job_data:
-        st.success(f"✅ Successfully fetched {len(job_data)} jobs from API!")
+        st.text(f"{len(job_data)} Job Postings")
     
     job_df = pd.DataFrame([extract_job(j) for j in job_data])
     
@@ -249,7 +248,7 @@ with main_tabs[0]:  # Job Listings tab
     else:  # Partners
         job_df = job_df[job_df["Job Type"].str.contains("Partner", case=False, na=False)]
     
-    # Check if dataframe is empty
+    # Check if dataframe is empty after filtering
     if job_df.empty:
         st.warning(f"No {job_type.lower()} job data available for the selected criteria in the selected time period.")
     else:
@@ -494,16 +493,18 @@ with main_tabs[1]:  # Attorney Placements tab
     # Attorney type selector
     role_type = st.radio("Select Attorney Type", ["Partners", "Associates"], horizontal=True, key="atty_type")
     
-    # Load data based on selections - with proper attorney label
+    # Load data based on selections
     if role_type == "Partners":
         attorney_data = fetch_attorneys_from_api("partners", attorney_time_period_days)
+        # Display simple count text without the green highlight
         if attorney_data:
-            st.success(f"✅ Successfully fetched {len(attorney_data)} partners from API!")
+            st.text(f"{len(attorney_data)} Placement Records")
         attorney_df = pd.DataFrame([extract_attorney(a) for a in attorney_data])
     else:  # Associates
         attorney_data = fetch_attorneys_from_api("associates", attorney_time_period_days)
+        # Display simple count text without the green highlight
         if attorney_data:
-            st.success(f"✅ Successfully fetched {len(attorney_data)} associates from API!")
+            st.text(f"{len(attorney_data)} Placement Records")
         attorney_df = pd.DataFrame([extract_attorney(a) for a in attorney_data])
     
     # Check if dataframe is empty
@@ -584,46 +585,6 @@ with main_tabs[1]:  # Attorney Placements tab
                     if len(top_firms) > 0:
                         # Convert Series to DataFrame for plotly
                         plot_df = pd.DataFrame({'Firms': top_firms.index, 'Count': top_firms.values})
-                        
-                        # Create a bar chart with properly sorted values
-                        fig = px.bar(
-                            plot_df,
-                            x='Firms',
-                            y='Count',
-                            labels={"Count": "Number of Attorneys", "Firms": ""},
-                            color_discrete_sequence=[ATTORNEY_COLOR]
-                        )
-                        
-                        # Customize layout to disable interactivity but keep responsiveness
-                        fig.update_layout(
-                            xaxis=dict(categoryorder='total descending'),
-                            margin=dict(t=10, b=10, l=10, r=10),
-                            xaxis_fixedrange=True,
-                            yaxis_fixedrange=True
-                        )
-                        
-                        # Render chart with container width responsiveness but disabled toolbar
-                        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-                    else:
-                        st.info("No data available with current filters.")
-                    
-                    # Show the detailed attorney moves
-                    st.subheader("Attorney Details")
-                    columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "City", "Title", "Move Date"]
-                    display_df = filtered_attorney_df[filtered_attorney_df["To Firm"].isin(top_firms.index.tolist())][columns_order] if not top_firms.empty else pd.DataFrame(columns=columns_order)
-                    if not display_df.empty:
-                        st.dataframe(display_df, hide_index=True)
-                    else:
-                        st.info("No detailed data available with current filters.")
-                else:
-                    # Get top departure firms and sort in descending order
-                    top_departure_firms = filtered_attorney_df["From Firm"].value_counts().head(10).sort_values(ascending=False)
-                    st.subheader(f"Top {len(top_departure_firms)} Departure Firms")
-                    
-                    # Handle empty dataframe case
-                    if len(top_departure_firms) > 0:
-                        # Convert Series to DataFrame for plotly
-                        plot_df = pd.DataFrame({'Firms': top_departure_firms.index, 'Count': top_departure_firms.values})
                         
                         # Create a bar chart with properly sorted values
                         fig = px.bar(
@@ -791,4 +752,44 @@ with main_tabs[1]:  # Attorney Placements tab
                     if not exp_df_details.empty:
                         st.dataframe(exp_df_details, hide_index=True)
                 else:
-                    st.info("No experience data available with current filters.")
+                    st.info("No experience data available with current filters.")df["To Firm"].isin(top_firms.index.tolist())][columns_order] if not top_firms.empty else pd.DataFrame(columns=columns_order)
+                    if not display_df.empty:
+                        st.dataframe(display_df, hide_index=True)
+                    else:
+                        st.info("No detailed data available with current filters.")
+                else:
+                    # Get top departure firms and sort in descending order
+                    top_departure_firms = filtered_attorney_df["From Firm"].value_counts().head(10).sort_values(ascending=False)
+                    st.subheader(f"Top {len(top_departure_firms)} Departure Firms")
+                    
+                    # Handle empty dataframe case
+                    if len(top_departure_firms) > 0:
+                        # Convert Series to DataFrame for plotly
+                        plot_df = pd.DataFrame({'Firms': top_departure_firms.index, 'Count': top_departure_firms.values})
+                        
+                        # Create a bar chart with properly sorted values
+                        fig = px.bar(
+                            plot_df,
+                            x='Firms',
+                            y='Count',
+                            labels={"Count": "Number of Attorneys", "Firms": ""},
+                            color_discrete_sequence=[ATTORNEY_COLOR]
+                        )
+                        
+                        # Customize layout to disable interactivity but keep responsiveness
+                        fig.update_layout(
+                            xaxis=dict(categoryorder='total descending'),
+                            margin=dict(t=10, b=10, l=10, r=10),
+                            xaxis_fixedrange=True,
+                            yaxis_fixedrange=True
+                        )
+                        
+                        # Render chart with container width responsiveness but disabled toolbar
+                        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                    else:
+                        st.info("No data available with current filters.")
+                    
+                    # Show the detailed attorney moves
+                    st.subheader("Attorney Details")
+                    columns_order = ["Name", "From Firm", "To Firm", "Practice Areas", "City", "Title", "Move Date"]
+                    display_df = filtered_attorney_df[filtered_attorney_
