@@ -216,6 +216,7 @@ def extract_job(job):
 
 # --- Main UI Section ---
 # Create tabs for the main views
+# Create tabs for the main views
 tab_labels = ["Job Listings", "Attorney Placements"]
 main_tabs = st.tabs(tab_labels)
 
@@ -235,8 +236,11 @@ with main_tabs[0]:  # Job Listings tab
     # Add job type toggle similar to attorney type
     job_type = st.radio("Select Job Type", ["Associates", "Partners"], horizontal=True)
     
-    # Load job data
+    # Load job data - with proper job label
     job_data = fetch_jobs_from_api(job_time_period_days)
+    if job_data:
+        st.success(f"✅ Successfully fetched {len(job_data)} jobs from API!")
+    
     job_df = pd.DataFrame([extract_job(j) for j in job_data])
     
     # Filter job_df based on job_type
@@ -490,12 +494,16 @@ with main_tabs[1]:  # Attorney Placements tab
     # Attorney type selector
     role_type = st.radio("Select Attorney Type", ["Partners", "Associates"], horizontal=True, key="atty_type")
     
-    # Load data based on selections
+    # Load data based on selections - with proper attorney label
     if role_type == "Partners":
         attorney_data = fetch_attorneys_from_api("partners", attorney_time_period_days)
+        if attorney_data:
+            st.success(f"✅ Successfully fetched {len(attorney_data)} partners from API!")
         attorney_df = pd.DataFrame([extract_attorney(a) for a in attorney_data])
     else:  # Associates
         attorney_data = fetch_attorneys_from_api("associates", attorney_time_period_days)
+        if attorney_data:
+            st.success(f"✅ Successfully fetched {len(attorney_data)} associates from API!")
         attorney_df = pd.DataFrame([extract_attorney(a) for a in attorney_data])
     
     # Check if dataframe is empty
