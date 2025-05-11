@@ -217,11 +217,11 @@ def extract_job(job):
 # --- Main UI Section ---
 # Create tabs for the main views
 # Create tabs for the main views
-tab_labels = ["Job Listings", "Attorney Placements"]
+tab_labels = ["Attorney Placements","Job Postings"]
 main_tabs = st.tabs(tab_labels)
 
 # Specific processing for Job Listings tab (first tab)
-with main_tabs[1]:  # Job Listings tab
+with main_tabs[0]:  # Job Listings tab
     # Time period selector for jobs
     job_time_options = ["Last 7 days", "Last 14 days", "Last 30 days", "Last 60 days"]
     job_time_values = [7, 14, 30, 60]
@@ -478,7 +478,7 @@ with main_tabs[1]:  # Job Listings tab
                     st.info("No experience data available with current filters.")
 
 # Specific processing for Attorney Placements tab (second tab)
-with main_tabs[0]:  # Attorney Placements tab
+with main_tabs[1]:  # Attorney Placements tab
     # Time period selector for attorneys
     attorney_time_options = ["Last 1 month", "Last 2 months", "Last 3 months", "Last 6 months"]
     attorney_time_values = [30, 60, 90, 180]
