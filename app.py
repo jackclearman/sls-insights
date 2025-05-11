@@ -98,12 +98,35 @@ def extract_job(j):
             "Am Law Ranking":None,"Region":region,"Firm ID":firm_id}
 
 def extract_attorney(a):
-    # robust handling when "recent_move" is None
-    recent=a.get("recent_move") or {}
-    move=recent.get("firm") or {}
-    firm=a.get("firm",{}) or {}
-    ranks=firm.get("ranks",{}) or {}
-    return {"Name":f"{a.get('first_name','')} {a.get('last_name','')}",
+    """Safely turn an attorney JSON blob into a flat dict.
+    Handles cases where `a` itself is None or missing sub-objects.
+    """
+    if not isinstance(a, dict):  # guard against unexpected None values
+        return {}
+
+    recent = a.get("recent_move") or {}
+    move   = recent.get("firm") or {}
+    firm   = a.get("firm") or {}
+    ranks  = firm.get("ranks") or {}
+
+    return {
+        "Name": f"{a.get('first_name','')} {a.get('last_name','')}",
+        "From Firm": move.get("old", {}).get("firm_name"),
+        "To Firm":   move.get("new", {}).get("firm_name"),
+        "Practice Areas": ", ".join(a.get("attorneys_practice_areas", []) or []),
+        "Specialties":    ", ".join(a.get("attorneys_specialties",   []) or []),
+        "City":            (a.get("location") or {}).get("city"),
+        "Graduation Year": a.get("graduation_year"),
+        "Law School":      (a.get("law_school") or {}).get("law_school_name"),
+        "Current Firm":    firm.get("firm_name"),
+        "Title":           ", ".join(a.get("attorneys_titles", []) or []),
+        "FirmProspects ID": a.get("id"),
+        "Profile Link":    f"[Link](https://engage.firmprospects.com/attorneys/profile/{a.get('id')})",
+        "Am Law Ranking":  ranks.get("top200"),
+        "Region":          (a.get("location") or {}).get("state"),
+        "Move Date":       recent.get("date"),
+        "Firm ID":         firm.get("id"),
+    } {"Name":f"{a.get('first_name','')} {a.get('last_name','')}",
             "From Firm":move.get("old",{}).get("firm_name"),
             "To Firm":move.get("new",{}).get("firm_name"),
             "Practice Areas":", ".join(a.get("attorneys_practice_areas",[]) or []),
