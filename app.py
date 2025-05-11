@@ -219,8 +219,262 @@ def extract_job(job):
 tab_labels = ["Job Listings", "Attorney Placements"]
 main_tabs = st.tabs(tab_labels)
 
-# Specific processing for Attorney Placements tab
-with main_tabs[0]:  # Attorney Placements tab
+# Specific processing for Job Listings tab (first tab)
+with main_tabs[0]:  # Job Listings tab
+    # Time period selector for jobs
+    job_time_options = ["Last 7 days", "Last 14 days", "Last 30 days", "Last 60 days"]
+    job_time_values = [7, 14, 30, 60]
+    
+    selected_job_period = st.selectbox(
+        "Select Time Period",
+        options=job_time_options,
+        index=2  # Default to 30 days
+    )
+    job_time_period_days = job_time_values[job_time_options.index(selected_job_period)]
+    
+    # Add job type toggle similar to attorney type
+    job_type = st.radio("Select Job Type", ["Associates", "Partners"], horizontal=True)
+    
+    # Load job data
+    job_data = fetch_jobs_from_api(job_time_period_days)
+    job_df = pd.DataFrame([extract_job(j) for j in job_data])
+    
+    # Filter job_df based on job_type
+    if job_type == "Associates":
+        job_df = job_df[job_df["Job Type"].str.contains("Associate", case=False, na=False)]
+    else:  # Partners
+        job_df = job_df[job_df["Job Type"].str.contains("Partner", case=False, na=False)]
+    
+    # Check if dataframe is empty
+    if job_df.empty:
+        st.warning(f"No {job_type.lower()} job data available for the selected criteria in the selected time period.")
+    else:
+        # --- Filter UI ---
+        # Extract all unique practice areas for filter
+        job_practice_areas = []
+        for practice_areas_str in job_df["Practice Areas"].dropna():
+            areas = practice_areas_str.split(", ")
+            job_practice_areas.extend(areas)
+        
+        # Convert to a set to get unique values, then sort
+        unique_job_practice_areas = sorted(set(job_practice_areas))
+        unique_job_practice_areas.insert(0, "All Practice Areas")
+        
+        # Create filter container
+        filter_container = st.container()
+        
+        with filter_container:
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                # Am Law ranking filter
+                amlaw_options = ["All Firms", "Am Law 50", "Am Law 100"]
+                amlaw_filter = st.selectbox("Filter by Am Law Ranking", amlaw_options, key="job_amlaw")
+            
+            with col2:
+                # Region filter
+                region_options = ["California Only", "Washington Only", "All Regions"]
+                region_filter = st.selectbox("Filter by Region", region_options, index=0, key="job_region")
+                
+            with col3:
+                # Practice area filter
+                practice_area_filter = st.selectbox("Filter by Practice Area", unique_job_practice_areas, key="job_practice")
+        
+        # Apply filters to job dataframe
+        filtered_job_df = job_df.copy()
+        
+        # Apply Region filter
+        if region_filter == "California Only":
+            filtered_job_df = filtered_job_df[filtered_job_df["Region"] == "California"]
+        elif region_filter == "Washington Only":
+            filtered_job_df = filtered_job_df[filtered_job_df["Region"] == "Washington"]
+        
+        # Apply Practice Area filter
+        if practice_area_filter != "All Practice Areas":
+            filtered_job_df = filtered_job_df[filtered_job_df["Practice Areas"].str.contains(practice_area_filter, na=False)]
+        
+        # Check if filtered dataframe is empty
+        if filtered_job_df.empty:
+            st.warning(f"No {job_type.lower()} job data available with the current filters. Try adjusting your filters.")
+        else:
+            # --- Job data visualization tabs ---
+            job_tabs = st.tabs(["Top Firms", "Top Cities", "Practice Areas", "Experience"])
+            
+            # Define a consistent color for the job tabs
+            JOB_COLOR = '#636EFA'  # Plotly's default blue
+            
+            # Tab 1: Top Firms
+            with job_tabs[0]:
+                # Get top firms and sort in descending order
+                top_firms = filtered_job_df["Firm"].value_counts().head(10).sort_values(ascending=False)
+                st.subheader(f"Top {len(top_firms)} Hiring Firms")
+                
+                # Handle empty dataframe case
+                if len(top_firms) > 0:
+                    # Convert Series to DataFrame for plotly
+                    plot_df = pd.DataFrame({'Firms': top_firms.index, 'Count': top_firms.values})
+                    
+                    # Create a bar chart with properly sorted values
+                    fig = px.bar(
+                        plot_df,
+                        x='Firms',
+                        y='Count',
+                        labels={"Count": f"Number of {job_type} Job Listings", "Firms": ""},
+                        color_discrete_sequence=[JOB_COLOR]
+                    )
+                    
+                    # Customize layout to disable interactivity but keep responsiveness
+                    fig.update_layout(
+                        xaxis=dict(categoryorder='total descending'),
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        xaxis_fixedrange=True,
+                        yaxis_fixedrange=True
+                    )
+                    
+                    # Render chart with container width responsiveness but disabled toolbar
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                else:
+                    st.info("No data available with current filters.")
+                
+                # Show the detailed job listings
+                st.subheader("Job Details")
+                columns_order = ["Job Title", "Firm", "Practice Areas", "City", "Experience Range", "Posted Date"]
+                display_df = filtered_job_df[filtered_job_df["Firm"].isin(top_firms.index.tolist())][columns_order] if not top_firms.empty else pd.DataFrame(columns=columns_order)
+                if not display_df.empty:
+                    st.dataframe(display_df, hide_index=True)
+                else:
+                    st.info("No detailed data available with current filters.")
+            
+            # Tab 2: Top Cities
+            with job_tabs[1]:  # Top Cities
+                st.subheader(f"Top Cities for {job_type} Job Listings")
+                
+                # Get top cities with job postings
+                job_top_cities = filtered_job_df["City"].value_counts().head(10).sort_values(ascending=False)
+                
+                if len(job_top_cities) > 0:
+                    # Convert Series to DataFrame for plotting
+                    job_city_df = pd.DataFrame({"Cities": job_top_cities.index, "Count": job_top_cities.values})
+                    
+                    # Create bar chart (same style as Top Firms)
+                    fig = px.bar(
+                        job_city_df,
+                        x="Cities",
+                        y="Count",
+                        labels={"Count": f"Number of {job_type} Jobs", "Cities": ""},
+                        color_discrete_sequence=[JOB_COLOR]  # Use consistent color
+                    )
+                    
+                    # Customize layout to match Top Firms
+                    fig.update_layout(
+                        xaxis=dict(categoryorder='total descending'),
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        xaxis_fixedrange=True,
+                        yaxis_fixedrange=True
+                    )
+                    
+                    # Render chart
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                    
+                    # Show table of jobs by city
+                    st.subheader("Job Details by City")
+                    job_city_columns = ["Job Title", "Firm", "Practice Areas", "City", "Experience Range", "Posted Date"]
+                    job_city_df_details = filtered_job_df[filtered_job_df["City"].isin(job_top_cities.index.tolist())][job_city_columns]
+                    if not job_city_df_details.empty:
+                        st.dataframe(job_city_df_details, hide_index=True)
+                else:
+                    st.info("No city data available with current filters.")
+            
+            # Tab 3: Practice Areas
+            with job_tabs[2]:  # Practice Areas
+                st.subheader(f"Top Practice Areas in {job_type} Job Listings")
+                
+                # Process practice areas (they're comma-separated in the dataframe)
+                job_all_areas = []
+                for areas in filtered_job_df["Practice Areas"].dropna():
+                    job_all_areas.extend([area.strip() for area in areas.split(",")])
+                
+                # Count occurrences and get top practice areas
+                job_practice_counts = pd.Series(job_all_areas).value_counts().head(10)
+                
+                if len(job_practice_counts) > 0:
+                    # Convert to DataFrame for plotting
+                    job_practice_df = pd.DataFrame({"Practice Area": job_practice_counts.index, "Count": job_practice_counts.values})
+                    
+                    # Create bar chart to match Top Firms style
+                    fig = px.bar(
+                        job_practice_df,
+                        x="Practice Area",
+                        y="Count",
+                        labels={"Count": f"Number of {job_type} Jobs", "Practice Area": ""},
+                        color_discrete_sequence=[JOB_COLOR]  # Use consistent color
+                    )
+                    
+                    # Update layout to match Top Firms
+                    fig.update_layout(
+                        xaxis=dict(categoryorder='total descending'),
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        xaxis_fixedrange=True,
+                        yaxis_fixedrange=True
+                    )
+                    
+                    # Render chart
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                    
+                    # Show table view too
+                    st.subheader(f"Practice Area Distribution in {job_type} Job Listings")
+                    st.dataframe(job_practice_df, hide_index=True)
+                else:
+                    st.info("No practice area data available with current filters.")
+            
+            # Tab 4: Experience
+            with job_tabs[3]:  # Experience
+                st.subheader(f"{job_type} Job Listings by Experience Level")
+                
+                # Create a new column for min years of experience (for sorting)
+                filtered_job_df["Min Experience"] = filtered_job_df["Experience Range"].str.extract(r'(\d+)').astype(float)
+                
+                # Group by experience range
+                if "Experience Range" in filtered_job_df.columns and not filtered_job_df.empty:
+                    exp_job_counts = filtered_job_df["Experience Range"].value_counts().sort_index()
+                    
+                    # Create DataFrame for plotting
+                    exp_job_df = pd.DataFrame({"Experience Required": exp_job_counts.index, "Number of Jobs": exp_job_counts.values})
+                    
+                    # Sort the DataFrame by min experience
+                    exp_job_df["Min Years"] = exp_job_df["Experience Required"].str.extract(r'(\d+)').astype(float)
+                    exp_job_df = exp_job_df.sort_values("Min Years")
+                    
+                    # Create a bar chart to match Top Firms style
+                    fig = px.bar(
+                        exp_job_df,
+                        x="Experience Required",
+                        y="Number of Jobs",
+                        labels={"Number of Jobs": "Count", "Experience Required": "Years of Experience Required"},
+                        color_discrete_sequence=[JOB_COLOR]  # Use consistent color
+                    )
+                    
+                    # Update layout to match Top Firms
+                    fig.update_layout(
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        xaxis_fixedrange=True,
+                        yaxis_fixedrange=True
+                    )
+                    
+                    # Render chart
+                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                    
+                    # Show table with job details by experience
+                    st.subheader("Job Details by Experience Requirement")
+                    job_exp_columns = ["Job Title", "Firm", "Practice Areas", "City", "Experience Range", "Posted Date"]
+                    job_exp_df_details = filtered_job_df.sort_values("Min Experience")[job_exp_columns]
+                    if not job_exp_df_details.empty:
+                        st.dataframe(job_exp_df_details, hide_index=True)
+                else:
+                    st.info("No experience data available with current filters.")
+
+# Specific processing for Attorney Placements tab (second tab)
+with main_tabs[1]:  # Attorney Placements tab
     # Time period selector for attorneys
     attorney_time_options = ["Last 1 month", "Last 2 months", "Last 3 months", "Last 6 months"]
     attorney_time_values = [30, 60, 90, 180]
@@ -228,12 +482,13 @@ with main_tabs[0]:  # Attorney Placements tab
     selected_attorney_period = st.selectbox(
         "Select Time Period",
         options=attorney_time_options,
-        index=2  # Default to 3 months
+        index=2,  # Default to 3 months
+        key="atty_time_period"
     )
     attorney_time_period_days = attorney_time_values[attorney_time_options.index(selected_attorney_period)]
     
     # Attorney type selector
-    role_type = st.radio("Select Attorney Type", ["Partners", "Associates"], horizontal=True)
+    role_type = st.radio("Select Attorney Type", ["Partners", "Associates"], horizontal=True, key="atty_type")
     
     # Load data based on selections
     if role_type == "Partners":
@@ -304,6 +559,9 @@ with main_tabs[0]:  # Attorney Placements tab
             # --- Attorney data visualization tabs ---
             attorney_tabs = st.tabs(["Top Firms", "Top Cities", "Practice Areas", "Experience"])
             
+            # Define a consistent color for the attorney tabs
+            ATTORNEY_COLOR = '#636EFA'  # Plotly's default blue
+            
             # Tab 1: Top Firms
             with attorney_tabs[0]:
                 # Add dropdown to select between destination and departure firms
@@ -324,7 +582,8 @@ with main_tabs[0]:  # Attorney Placements tab
                             plot_df,
                             x='Firms',
                             y='Count',
-                            labels={"Count": "Number of Attorneys", "Firms": ""}
+                            labels={"Count": "Number of Attorneys", "Firms": ""},
+                            color_discrete_sequence=[ATTORNEY_COLOR]
                         )
                         
                         # Customize layout to disable interactivity but keep responsiveness
@@ -363,7 +622,8 @@ with main_tabs[0]:  # Attorney Placements tab
                             plot_df,
                             x='Firms',
                             y='Count',
-                            labels={"Count": "Number of Attorneys", "Firms": ""}
+                            labels={"Count": "Number of Attorneys", "Firms": ""},
+                            color_discrete_sequence=[ATTORNEY_COLOR]
                         )
                         
                         # Customize layout to disable interactivity but keep responsiveness
@@ -388,13 +648,9 @@ with main_tabs[0]:  # Attorney Placements tab
                     else:
                         st.info("No detailed data available with current filters.")
             
-            # Additional tabs implementation for attorneys (simplified for brevity
-            ATTORNEY_COLOR = '#636EFA'  # Plotly's default blue
-            
- 
             # Tab 2: Top Cities
             with attorney_tabs[1]:  # Top Cities
-                st.subheader("Top Cities for Attorney Movements")
+                st.subheader(f"Top Cities for {role_type} Movements")
                 
                 # Get the top cities with attorney movements
                 top_cities = filtered_attorney_df["City"].value_counts().head(10).sort_values(ascending=False)
@@ -408,7 +664,7 @@ with main_tabs[0]:  # Attorney Placements tab
                         city_df,
                         x="Cities",
                         y="Count",
-                        labels={"Count": "Number of Attorneys", "Cities": ""},
+                        labels={"Count": f"Number of {role_type}", "Cities": ""},
                         color_discrete_sequence=[ATTORNEY_COLOR]  # Use consistent color
                     )
                     
@@ -425,7 +681,7 @@ with main_tabs[0]:  # Attorney Placements tab
                     
                     # Show table of attorneys by city
                     st.subheader("Attorney Details by City")
-                    city_columns = ["Name", "From Firm", "To Firm", "Practice Areas", "City", "Move Date"]
+                    city_columns = ["Name", "From Firm", "To Firm", "Practice Areas", "City", "Title", "Move Date"]
                     city_df_details = filtered_attorney_df[filtered_attorney_df["City"].isin(top_cities.index.tolist())][city_columns]
                     if not city_df_details.empty:
                         st.dataframe(city_df_details, hide_index=True)
@@ -434,7 +690,7 @@ with main_tabs[0]:  # Attorney Placements tab
             
             # Tab 3: Practice Areas
             with attorney_tabs[2]:  # Practice Areas
-                st.subheader("Top Practice Areas")
+                st.subheader(f"Top Practice Areas for {role_type}")
                 
                 # Process practice areas (they're comma-separated in the dataframe)
                 all_areas = []
@@ -453,7 +709,7 @@ with main_tabs[0]:  # Attorney Placements tab
                         practice_df,
                         x="Practice Area",
                         y="Count",
-                        labels={"Count": "Number of Attorneys", "Practice Area": ""},
+                        labels={"Count": f"Number of {role_type}", "Practice Area": ""},
                         color_discrete_sequence=[ATTORNEY_COLOR]  # Use consistent color
                     )
                     
@@ -476,7 +732,7 @@ with main_tabs[0]:  # Attorney Placements tab
             
             # Tab 4: Experience
             with attorney_tabs[3]:  # Experience
-                st.subheader("Attorney Experience Distribution")
+                st.subheader(f"{role_type} Experience Distribution")
                 
                 # Calculate years since graduation to estimate experience level
                 current_year = datetime.now().year
@@ -506,7 +762,7 @@ with main_tabs[0]:  # Attorney Placements tab
                         exp_df,
                         x="Experience",
                         y="Count",
-                        labels={"Count": "Number of Attorneys", "Experience": "Years of Experience"},
+                        labels={"Count": f"Number of {role_type}", "Experience": "Years of Experience"},
                         color_discrete_sequence=[ATTORNEY_COLOR]  # Use consistent color
                     )
                     
@@ -526,253 +782,5 @@ with main_tabs[0]:  # Attorney Placements tab
                     exp_df_details = valid_exp_df[exp_columns].sort_values("Experience", ascending=False)
                     if not exp_df_details.empty:
                         st.dataframe(exp_df_details, hide_index=True)
-                else:
-                    st.info("No experience data available with current filters.")
-
-
-
-# Specific processing for Job Listings tab
-with main_tabs[1]:  # Job Listings tab
-    # Time period selector for jobs
-    job_time_options = ["Last 7 days", "Last 14 days", "Last 30 days", "Last 60 days"]
-    job_time_values = [7, 14, 30, 60]
-    
-    selected_job_period = st.selectbox(
-        "Select Time Period",
-        options=job_time_options,
-        index=2  # Default to 30 days
-    )
-    job_time_period_days = job_time_values[job_time_options.index(selected_job_period)]
-    
-    # Load job data
-    job_data = fetch_jobs_from_api(job_time_period_days)
-    job_df = pd.DataFrame([extract_job(j) for j in job_data])
-    
-    # Check if dataframe is empty
-    if job_df.empty:
-        st.warning(f"No job data available for the selected criteria in the selected time period.")
-    else:
-        # --- Filter UI ---
-        # Extract all unique practice areas for filter
-        job_practice_areas = []
-        for practice_areas_str in job_df["Practice Areas"].dropna():
-            areas = practice_areas_str.split(", ")
-            job_practice_areas.extend(areas)
-        
-        # Convert to a set to get unique values, then sort
-        unique_job_practice_areas = sorted(set(job_practice_areas))
-        unique_job_practice_areas.insert(0, "All Practice Areas")
-        
-        # Create filter container
-        filter_container = st.container()
-        
-        with filter_container:
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                # Am Law ranking filter
-                amlaw_options = ["All Firms", "Am Law 50", "Am Law 100"]
-                amlaw_filter = st.selectbox("Filter by Am Law Ranking", amlaw_options, key="job_amlaw")
-            
-            with col2:
-                # Region filter
-                region_options = ["California Only", "Washington Only", "All Regions"]
-                region_filter = st.selectbox("Filter by Region", region_options, index=0, key="job_region")
-                
-            with col3:
-                # Practice area filter
-                practice_area_filter = st.selectbox("Filter by Practice Area", unique_job_practice_areas, key="job_practice")
-        
-        # Apply filters to job dataframe
-        filtered_job_df = job_df.copy()
-        
-        # Apply Region filter
-        if region_filter == "California Only":
-            filtered_job_df = filtered_job_df[filtered_job_df["Region"] == "California"]
-        elif region_filter == "Washington Only":
-            filtered_job_df = filtered_job_df[filtered_job_df["Region"] == "Washington"]
-        
-        # Apply Practice Area filter
-        if practice_area_filter != "All Practice Areas":
-            filtered_job_df = filtered_job_df[filtered_job_df["Practice Areas"].str.contains(practice_area_filter, na=False)]
-        
-        # Check if filtered dataframe is empty
-        if filtered_job_df.empty:
-            st.warning("No job data available with the current filters. Try adjusting your filters.")
-        else:
-            # --- Job data visualization tabs ---
-            job_tabs = st.tabs(["Top Firms", "Top Cities", "Practice Areas", "Experience"])
-            
-            # Tab 1: Top Firms
-            with job_tabs[0]:
-                # Get top firms and sort in descending order
-                top_firms = filtered_job_df["Firm"].value_counts().head(10).sort_values(ascending=False)
-                st.subheader(f"Top {len(top_firms)} Hiring Firms")
-                
-                # Handle empty dataframe case
-                if len(top_firms) > 0:
-                    # Convert Series to DataFrame for plotly
-                    plot_df = pd.DataFrame({'Firms': top_firms.index, 'Count': top_firms.values})
-                    
-                    # Create a bar chart with properly sorted values
-                    fig = px.bar(
-                        plot_df,
-                        x='Firms',
-                        y='Count',
-                        labels={"Count": "Number of Job Listings", "Firms": ""}
-                    )
-                    
-                    # Customize layout to disable interactivity but keep responsiveness
-                    fig.update_layout(
-                        xaxis=dict(categoryorder='total descending'),
-                        margin=dict(t=10, b=10, l=10, r=10),
-                        xaxis_fixedrange=True,
-                        yaxis_fixedrange=True
-                    )
-                    
-                    # Render chart with container width responsiveness but disabled toolbar
-                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-                else:
-                    st.info("No data available with current filters.")
-                
-                # Show the detailed job listings
-                st.subheader("Job Details")
-                columns_order = ["Job Title", "Firm", "Practice Areas", "City", "Experience Range", "Posted Date"]
-                display_df = filtered_job_df[filtered_job_df["Firm"].isin(top_firms.index.tolist())][columns_order] if not top_firms.empty else pd.DataFrame(columns=columns_order)
-                if not display_df.empty:
-                    st.dataframe(display_df, hide_index=True)
-                else:
-                    st.info("No detailed data available with current filters.")
-            
-            # Additional tabs implementation for jobs (simplified for brevity)
-            JOB_COLOR = '#636EFA'  # Plotly's default blue - same as attorney tabs for consistency
-            
-            # Tab 1: Top Firms (Already implemented with default styling)
-            
-            # Tab 2: Top Cities
-            with job_tabs[1]:  # Top Cities
-                st.subheader("Top Cities for Job Listings")
-                
-                # Get top cities with job postings
-                job_top_cities = filtered_job_df["City"].value_counts().head(10).sort_values(ascending=False)
-                
-                if len(job_top_cities) > 0:
-                    # Convert Series to DataFrame for plotting
-                    job_city_df = pd.DataFrame({"Cities": job_top_cities.index, "Count": job_top_cities.values})
-                    
-                    # Create bar chart (same style as Top Firms)
-                    fig = px.bar(
-                        job_city_df,
-                        x="Cities",
-                        y="Count",
-                        labels={"Count": "Number of Jobs", "Cities": ""},
-                        color_discrete_sequence=[JOB_COLOR]  # Use consistent color
-                    )
-                    
-                    # Customize layout to match Top Firms
-                    fig.update_layout(
-                        xaxis=dict(categoryorder='total descending'),
-                        margin=dict(t=10, b=10, l=10, r=10),
-                        xaxis_fixedrange=True,
-                        yaxis_fixedrange=True
-                    )
-                    
-                    # Render chart
-                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-                    
-                    # Show table of jobs by city
-                    st.subheader("Job Details by City")
-                    job_city_columns = ["Job Title", "Firm", "Practice Areas", "City", "Experience Range", "Posted Date"]
-                    job_city_df_details = filtered_job_df[filtered_job_df["City"].isin(job_top_cities.index.tolist())][job_city_columns]
-                    if not job_city_df_details.empty:
-                        st.dataframe(job_city_df_details, hide_index=True)
-                else:
-                    st.info("No city data available with current filters.")
-            
-            # Tab 3: Practice Areas
-            with job_tabs[2]:  # Practice Areas
-                st.subheader("Top Practice Areas in Job Listings")
-                
-                # Process practice areas (they're comma-separated in the dataframe)
-                job_all_areas = []
-                for areas in filtered_job_df["Practice Areas"].dropna():
-                    job_all_areas.extend([area.strip() for area in areas.split(",")])
-                
-                # Count occurrences and get top practice areas
-                job_practice_counts = pd.Series(job_all_areas).value_counts().head(10)
-                
-                if len(job_practice_counts) > 0:
-                    # Convert to DataFrame for plotting
-                    job_practice_df = pd.DataFrame({"Practice Area": job_practice_counts.index, "Count": job_practice_counts.values})
-                    
-                    # Create bar chart to match Top Firms style
-                    fig = px.bar(
-                        job_practice_df,
-                        x="Practice Area",
-                        y="Count",
-                        labels={"Count": "Number of Jobs", "Practice Area": ""},
-                        color_discrete_sequence=[JOB_COLOR]  # Use consistent color
-                    )
-                    
-                    # Update layout to match Top Firms
-                    fig.update_layout(
-                        xaxis=dict(categoryorder='total descending'),
-                        margin=dict(t=10, b=10, l=10, r=10),
-                        xaxis_fixedrange=True,
-                        yaxis_fixedrange=True
-                    )
-                    
-                    # Render chart
-                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-                    
-                    # Show table view too
-                    st.subheader("Practice Area Distribution in Job Listings")
-                    st.dataframe(job_practice_df, hide_index=True)
-                else:
-                    st.info("No practice area data available with current filters.")
-            
-            # Tab 4: Experience
-            with job_tabs[3]:  # Experience
-                st.subheader("Job Listings by Experience Level")
-                
-                # Create a new column for min years of experience (for sorting)
-                filtered_job_df["Min Experience"] = filtered_job_df["Experience Range"].str.extract(r'(\d+)').astype(float)
-                
-                # Group by experience range
-                if "Experience Range" in filtered_job_df.columns and not filtered_job_df.empty:
-                    exp_job_counts = filtered_job_df["Experience Range"].value_counts().sort_index()
-                    
-                    # Create DataFrame for plotting
-                    exp_job_df = pd.DataFrame({"Experience Required": exp_job_counts.index, "Number of Jobs": exp_job_counts.values})
-                    
-                    # Sort the DataFrame by min experience
-                    exp_job_df["Min Years"] = exp_job_df["Experience Required"].str.extract(r'(\d+)').astype(float)
-                    exp_job_df = exp_job_df.sort_values("Min Years")
-                    
-                    # Create a bar chart to match Top Firms style
-                    fig = px.bar(
-                        exp_job_df,
-                        x="Experience Required",
-                        y="Number of Jobs",
-                        labels={"Number of Jobs": "Count", "Experience Required": "Years of Experience Required"},
-                        color_discrete_sequence=[JOB_COLOR]  # Use consistent color
-                    )
-                    
-                    # Update layout to match Top Firms
-                    fig.update_layout(
-                        margin=dict(t=10, b=10, l=10, r=10),
-                        xaxis_fixedrange=True,
-                        yaxis_fixedrange=True
-                    )
-                    
-                    # Render chart
-                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-                    
-                    # Show table with job details by experience
-                    st.subheader("Job Details by Experience Requirement")
-                    job_exp_columns = ["Job Title", "Firm", "Practice Areas", "City", "Experience Range", "Posted Date"]
-                    job_exp_df_details = filtered_job_df.sort_values("Min Experience")[job_exp_columns]
-                    if not job_exp_df_details.empty:
-                        st.dataframe(job_exp_df_details, hide_index=True)
                 else:
                     st.info("No experience data available with current filters.")
