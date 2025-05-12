@@ -310,7 +310,7 @@ with job_tab:
     # Practice Areas
     with practice_tab:
         st.subheader(f"Top Practice Areas ({job_type})")
-        areas = [     a.strip()     for s in df["Practice Areas"].dropna()     for a in s.split(",")     if a.strip()              # ← keeps only non-blank values ]
+        areas = [     a.strip()     for s in df["Practice Areas"].dropna()     for a in s.split(",")     if a.strip()]              # ← keeps only non-blank values 
         series = pd.Series(areas).value_counts().head(10)
         plot_df = pd.DataFrame({"Practice Area": series.index, "Count": series.values})
         fig = px.bar(plot_df, x="Practice Area", y="Count",
