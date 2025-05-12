@@ -319,7 +319,17 @@ with job_tab:
                           xaxis_fixedrange=True, yaxis_fixedrange=True,
                           margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        st.dataframe(plot_df, hide_index=True)
+        # ---- detailed job listings for the displayed practice areas ------------
+        detail_cols = ["Job Title", "Firm", "Practice Areas", "City",
+                       "Experience Range", "Posted Date", "Firm Prospects Link"]
+    
+        # keep rows that contain ANY of the top-10 practice areas
+        mask = df["Practice Areas"].apply(
+            lambda cell: any(pa in cell for pa in series.index)
+        )
+        st.dataframe(df[mask][detail_cols],
+                     hide_index=True,
+                     use_container_width=True)
 
     # Experience
     with exp_tab:
