@@ -322,7 +322,18 @@ with job_tab:
         # ---- detailed job listings for the displayed practice areas ------------
         detail_cols = ["Job Title", "Firm", "Practice Areas", "City",
                        "Experience Range", "Posted Date", "Firm Prospects Link"]
-        st.dataframe(plot_df, hide_index=True)
+        # ---- detailed attorney moves for the displayed practice areas ----------
+        detail_cols = ["Name", "From Firm", "To Firm", "Practice Areas",
+                       "City", "Title", "Move Date"]
+        
+        mask = df["Practice Areas"].fillna("").apply(
+            lambda cell: any(pa in cell for pa in series.index)
+        )
+        
+        st.dataframe(df[mask][detail_cols],
+                     hide_index=True,
+                     use_container_width=True)
+
         # keep rows that contain ANY of the top-10 practice areas
         
     # Experience
