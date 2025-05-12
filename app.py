@@ -244,9 +244,12 @@ with job_tab:
                                      ["California Only", "Washington Only", "All Regions"])
     with col3:
         # dynamic practice areas list
-        all_areas = sorted({area.strip()
-                            for s in job_df["Practice Areas"].dropna()
-                            for area in s.split(",")})
+        all_areas = sorted({
+            area.strip()
+            for s in job_df["Practice Areas"].dropna()
+            for area in s.split(",")
+            if area.strip()
+        })
         practice_filter = st.selectbox("Filter by Practice Area",
                                        ["All Practice Areas"] + all_areas)
 
@@ -307,7 +310,7 @@ with job_tab:
     # Practice Areas
     with practice_tab:
         st.subheader(f"Top Practice Areas ({job_type})")
-        areas = [a.strip() for s in df["Practice Areas"].dropna() for a in s.split(",")]
+        areas = [     a.strip()     for s in df["Practice Areas"].dropna()     for a in s.split(",")     if a.strip()              # ← keeps only non-blank values ]
         series = pd.Series(areas).value_counts().head(10)
         plot_df = pd.DataFrame({"Practice Area": series.index, "Count": series.values})
         fig = px.bar(plot_df, x="Practice Area", y="Count",
@@ -397,9 +400,12 @@ with atty_tab:
                                      ["California Only", "Washington Only", "All Regions"],
                                      index=0, key="atty_region")
     with col3:
-        all_areas = sorted({area.strip()
-                            for s in atty_df["Practice Areas"].dropna()
-                            for area in s.split(",")})
+        all_areas = sorted({
+            area.strip()
+            for s in job_df["Practice Areas"].dropna()
+            for area in s.split(",")
+            if area.strip()
+        })
         practice_filter = st.selectbox("Filter by Practice Area",
                                        ["All Practice Areas"] + all_areas,
                                        key="atty_practice")
@@ -461,7 +467,7 @@ with atty_tab:
     # Practice Areas
     with practice_tab:
         st.subheader(f"Top Practice Areas ({role_type})")
-        areas = [a.strip() for s in df["Practice Areas"].dropna() for a in s.split(",")]
+        areas = [     a.strip()     for s in df["Practice Areas"].dropna()     for a in s.split(",")     if a.strip()              # ← keeps only non-blank values ]
         series = pd.Series(areas).value_counts().head(10)
         plot_df = pd.DataFrame({"Practice Area": series.index, "Count": series.values})
         fig = px.bar(plot_df, x="Practice Area", y="Count",
