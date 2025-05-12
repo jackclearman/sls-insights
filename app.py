@@ -322,15 +322,9 @@ with job_tab:
         # ---- detailed job listings for the displayed practice areas ------------
         detail_cols = ["Job Title", "Firm", "Practice Areas", "City",
                        "Experience Range", "Posted Date", "Firm Prospects Link"]
-    
+        st.dataframe(plot_df, hide_index=True)
         # keep rows that contain ANY of the top-10 practice areas
-        mask = df["Practice Areas"].apply(
-            lambda cell: any(pa in cell for pa in series.index)
-        )
-        st.dataframe(df[mask][detail_cols],
-                     hide_index=True,
-                     use_container_width=True)
-
+        
     # Experience
     with exp_tab:
         st.subheader(f"{job_type} Job Listings by Experience")
@@ -495,10 +489,8 @@ with atty_tab:
         mask = df["Practice Areas"].apply(
             lambda cell: any(pa in cell for pa in series.index)
         )
-        st.dataframe(df[mask][detail_cols],
-                     hide_index=True,
-                     use_container_width=True)
-
+        st.dataframe(plot_df, hide_index=True)
+        
     # Experience
     with exp_tab:
         st.subheader(f"{role_type} Experience Distribution")
