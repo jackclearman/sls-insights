@@ -287,7 +287,7 @@ with job_tab:
         st.dataframe(df[df["Firm"].isin(series.index)]
                      [["Job Title", "Firm", "Practice Areas", "City",
                        "Experience Range", "Posted Date","Firm Prospects Link"]],
-                     hide_index=True)
+                     hide_index=True,use_container_width=True)
 
     # Top Cities
     with top_cities_tab:
@@ -302,7 +302,7 @@ with job_tab:
         st.dataframe(df[df["City"].isin(series.index)]
                      [["Job Title", "Firm", "Practice Areas", "City",
                        "Experience Range", "Posted Date", "Firm Prospects Link"]],
-                     hide_index=True)
+                     hide_index=True,use_container_width=True)
 
     # Practice Areas
     with practice_tab:
@@ -342,7 +342,7 @@ with job_tab:
             st.dataframe(exp_df.sort_values("Min Years")
                          [["Job Title", "Firm", "Practice Areas", "City",
                            "Experience Range", "Posted Date", "Firm Prospects Link"]],
-                         hide_index=True)
+                         hide_index=True,use_container_width=True)
 
 # --------------------------------------------------------------------------- #
 #  ATTORNEY PLACEMENTS TAB
