@@ -286,7 +286,7 @@ with job_tab:
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.dataframe(df[df["Firm"].isin(series.index)]
                      [["Job Title", "Firm", "Practice Areas", "City",
-                       "Experience Range", "Posted Date"]],
+                       "Experience Range", "Posted Date","pageUrl"]],
                      hide_index=True)
 
     # Top Cities
@@ -301,7 +301,7 @@ with job_tab:
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.dataframe(df[df["City"].isin(series.index)]
                      [["Job Title", "Firm", "Practice Areas", "City",
-                       "Experience Range", "Posted Date"]],
+                       "Experience Range", "Posted Date","pageUrl"]],
                      hide_index=True)
 
     # Practice Areas
@@ -341,7 +341,7 @@ with job_tab:
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             st.dataframe(exp_df.sort_values("Min Years")
                          [["Job Title", "Firm", "Practice Areas", "City",
-                           "Experience Range", "Posted Date"]],
+                           "Experience Range", "Posted Date","pageUrl"]],
                          hide_index=True)
 
 # --------------------------------------------------------------------------- #
