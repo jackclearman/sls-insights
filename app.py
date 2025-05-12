@@ -204,14 +204,15 @@ with job_tab:
     job_type = st.radio("Select Job Type", ["Associates", "Partners"], horizontal=True)
 
     # ── data ──────────────────────────────────────────
+        # ── data (refresh when the date range changes) ─────────────────────────────
     if (
-        "job_raw"    not in st.session_state
-        or "jobs_period" not in st.session_state
-        or st.session_state["jobs_period"] != period_days
+        "job_raw" not in st.session_state
+        or st.session_state.get("jobs_fetch_days") != period_days
     ):
-        st.session_state["job_raw"] = fetch_jobs_from_api(period_days)
-        st.session_state["jobs_period"] = period_days      # ← remember current range
+        st.session_state["job_raw"]        = fetch_jobs_from_api(period_days)
+        st.session_state["jobs_fetch_days"] = period_days    # remember current range
         st.text(f"{len(st.session_state['job_raw']):,} jobs fetched from API.")
+
 
     job_df = pd.DataFrame([extract_job(j) for j in st.session_state["job_raw"]])
 
@@ -361,19 +362,18 @@ with atty_tab:
 
     # ── data ──────────────────────────────────────────
     atty_key = "partners" if role_type == "Partners" else "associates"
-    # re-fetch when either the time range *or* the role changes
-    if (
-        "atty_raw"      not in st.session_state
-        or "atty_period" not in st.session_state
-        or "atty_role"   not in st.session_state
-        or st.session_state["atty_period"] != atty_days
-        or st.session_state["atty_role"]   != atty_key
-    ):
-        st.session_state["atty_raw"]   = fetch_attorneys_from_api(atty_key, atty_days)
-        st.session_state["atty_period"] = atty_days    # remember both params
-        st.session_state["atty_role"]   = atty_key
-        st.text(f"{len(st.session_state['atty_raw']):,} placement records fetched from API.")
     
+    # ── data (refresh when date range OR role changes) ─────────────────────────
+    if (
+        "atty_raw" not in st.session_state
+        or st.session_state.get("atty_fetch_days") != atty_days
+        or st.session_state.get("atty_fetch_role") != atty_key
+    ):
+        st.session_state["atty_raw"]        = fetch_attorneys_from_api(atty_key, atty_days)
+        st.session_state["atty_fetch_days"] = atty_days   # remember current range
+        st.session_state["atty_fetch_role"] = atty_key    # remember Partner/Associate
+        st.text(f"{len(st.session_state['atty_raw']):,} placement records fetched from API.")
+
 
     atty_df = pd.DataFrame([extract_attorney(a) for a in st.session_state["atty_raw"]])
 
