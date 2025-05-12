@@ -1,11 +1,11 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # SLS Insights Dashboard  – full Streamlit app
-# (2025-05-10)  – includes:
-#   • single success toast per dataset
-#   • working Am Law filters
-#   • cleaned-up Experience chart (no “total” bar)
-#   • brand-new bar-charts for Attorney Placements (Top Firms / Cities / Areas)
+# (2025-05-11)  – includes requested fixes:
+#   • plain-text fetch messages (no green success banners)
+#   • restored “Experience” tab in Attorney Placements
+#   • detailed tables for Top Firms and Top Cities in Placements
 # ──────────────────────────────────────────────────────────────────────────────
+
 import os
 from datetime import datetime, timedelta
 
@@ -18,12 +18,8 @@ import streamlit as st
 st.set_page_config(page_title="Legal Recruiting Dashboard", layout="wide")
 st.title("SLS Insights Dashboard")
 
-# Success-message placeholders (prevents duplicate green banners)
-job_success_ph  = st.empty()
-atty_success_ph = st.empty()
-
 # ─── API configuration ────────────────────────────────────────────────────────
-JOBS_API_ENDPOINT      = "https://developer.firmprospects.com/v1/jobs"
+JOBS_API_ENDPOINT = "https://developer.firmprospects.com/v1/jobs"
 ATTORNEYS_API_ENDPOINT = "https://developer.firmprospects.com/v1/attorneys"
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -210,8 +206,7 @@ with job_tab:
     # ── data ──────────────────────────────────────────
     if "job_raw" not in st.session_state:
         st.session_state["job_raw"] = fetch_jobs_from_api(period_days)
-        job_success_ph.success(f"✅ Successfully fetched "
-                               f"{len(st.session_state['job_raw'])} jobs from API!")
+        st.text(f"{len(st.session_state['job_raw']):,} jobs fetched from API.")
 
     job_df = pd.DataFrame([extract_job(j) for j in st.session_state["job_raw"]])
 
@@ -363,8 +358,7 @@ with atty_tab:
     if "atty_raw" not in st.session_state:
         atty_key = "partners" if role_type == "Partners" else "associates"
         st.session_state["atty_raw"] = fetch_attorneys_from_api(atty_key, atty_days)
-        atty_success_ph.success(f"✅ Successfully fetched "
-                                f"{len(st.session_state['atty_raw'])} placements from API!")
+        st.text(f"{len(st.session_state['atty_raw']):,} placement records fetched from API.")
 
     atty_df = pd.DataFrame([extract_attorney(a) for a in st.session_state["atty_raw"]])
 
@@ -415,8 +409,8 @@ with atty_tab:
         st.stop()
 
     # ── visual tabs ───────────────────────────────────
-    top_firms_tab, top_cities_tab, practice_tab = st.tabs(
-        ["Top Firms", "Top Cities", "Practice Areas"]
+    top_firms_tab, top_cities_tab, practice_tab, exp_tab = st.tabs(
+        ["Top Firms", "Top Cities", "Practice Areas", "Experience"]
     )
 
     # Top Firms
@@ -429,9 +423,9 @@ with atty_tab:
                           xaxis_fixedrange=True, yaxis_fixedrange=True,
                           margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        st.dataframe(df[df["To Firm"].isin(series.index)]
-                     [["Name", "From Firm", "To Firm", "Practice Areas",
-                       "City", "Move Date"]],
+        detail_cols = ["Name", "From Firm", "To Firm", "Practice Areas",
+                       "City", "Title", "Move Date"]
+        st.dataframe(df[df["To Firm"].isin(series.index)][detail_cols],
                      hide_index=True)
 
     # Top Cities
@@ -444,9 +438,9 @@ with atty_tab:
                           xaxis_fixedrange=True, yaxis_fixedrange=True,
                           margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        st.dataframe(df[df["City"].isin(series.index)]
-                     [["Name", "From Firm", "To Firm", "Practice Areas",
-                       "City", "Move Date"]],
+        detail_cols = ["Name", "From Firm", "To Firm", "Practice Areas",
+                       "City", "Title", "Move Date"]
+        st.dataframe(df[df["City"].isin(series.index)][detail_cols],
                      hide_index=True)
 
     # Practice Areas
@@ -462,3 +456,34 @@ with atty_tab:
                           margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.dataframe(plot_df, hide_index=True)
+
+    # Experience
+    with exp_tab:
+        st.subheader(f"{role_type} Experience Distribution")
+        current_year = datetime.now().year
+        df_exp = df.copy()
+        df_exp["Graduation Year"] = pd.to_numeric(df_exp["Graduation Year"], errors="coerce")
+        df_exp = df_exp.dropna(subset=["Graduation Year"])
+        if df_exp.empty:
+            st.info("No experience data available.")
+        else:
+            df_exp["Years Since JD"] = current_year - df_exp["Graduation Year"]
+            bins   = [0, 3, 5, 8, 10, 15, 20, 50]
+            labels = ["0-3", "3-5", "5-8", "8-10", "10-15", "15-20", "20+"]
+            df_exp["Bracket"] = pd.cut(df_exp["Years Since JD"], bins=bins,
+                                       labels=labels, right=False)
+
+            counts = df_exp["Bracket"].value_counts().sort_index()
+            plot_df = pd.DataFrame({"Experience": counts.index, "Count": counts.values})
+            fig = px.bar(plot_df, x="Experience", y="Count",
+                         color_discrete_sequence=[ATTY_COLOR])
+            fig.update_layout(xaxis_fixedrange=True, yaxis_fixedrange=True,
+                              margin=dict(t=10, b=10, l=10, r=10))
+            st.plotly_chart(fig, use_container_width=True,
+                            config={"displayModeBar": False})
+
+            cols = ["Name", "From Firm", "To Firm", "Practice Areas",
+                    "City", "Title", "Graduation Year", "Years Since JD",
+                    "Bracket", "Move Date"]
+            st.dataframe(df_exp[cols].sort_values("Years Since JD"),
+                         hide_index=True)
