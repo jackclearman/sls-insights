@@ -145,7 +145,6 @@ def extract_job(job):
         "Job Status": job.get("statusLabel", ""),
         "Job Type": job.get("title", [""])[0] if job.get("title") else "",
         "FirmProspects ID": job.get("id"),
-        "Profile Link": f"[Link]({job.get('pageUrl', '')})",
         "Firm Prospects Link": job.get("pageUrl", ""),
         "Am Law Ranking": None,  # filled later
         "Region": region,
