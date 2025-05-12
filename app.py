@@ -489,7 +489,18 @@ with atty_tab:
         mask = df["Practice Areas"].apply(
             lambda cell: any(pa in cell for pa in series.index)
         )
-        st.dataframe(plot_df, hide_index=True)
+        # ---- detailed job listings for the displayed practice areas -------------
+        detail_cols = ["Job Title", "Firm", "Practice Areas", "City",
+                       "Experience Range", "Posted Date", "Firm Prospects Link"]
+        
+        mask = df["Practice Areas"].fillna("").apply(
+            lambda cell: any(pa in cell for pa in series.index)   # keep rows matching top-10 areas
+        )
+        
+        st.dataframe(df[mask][detail_cols],
+                     hide_index=True,
+                     use_container_width=True)
+
         
     # Experience
     with exp_tab:
