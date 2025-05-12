@@ -204,7 +204,7 @@ with job_tab:
     job_type = st.radio("Select Job Type", ["Associates", "Partners"], horizontal=True)
 
     # ── data ──────────────────────────────────────────
-        # ── data (refresh when the date range changes) ─────────────────────────────
+
     if (
         "job_raw" not in st.session_state
         or st.session_state.get("jobs_fetch_days") != period_days
