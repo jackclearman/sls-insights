@@ -167,6 +167,9 @@ with job_tab:
         st.text(f"{len(st.session_state['job_raw']):,} jobs fetched from API.")
 
     job_df = pd.DataFrame([extract_job(j) for j in st.session_state["job_raw"]])
+    job_df = (pd.DataFrame([extract_job(j) for j in st.session_state["job_raw"]])
+                .drop_duplicates(subset="FirmProspects ID")
+                .reset_index(drop=True))
 
     # add Am Law
     amlaw_df = load_amlaw_data()
