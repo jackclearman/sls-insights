@@ -56,7 +56,7 @@ def fetch_jobs_from_api(days_range=30):
                         "condition": "or", "use_second_location": True},
             "posted_date": {"min": start, "max": today},
             "status": 1,
-            "title": [title],
+            "titles": [title],
         }
 
 
