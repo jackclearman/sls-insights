@@ -59,13 +59,15 @@ def fetch_jobs_from_api(days_range=30):
             "title": [title],
         }
 
-    jobs = []
-    for t in ("Associate", "Partner"):
+
+    jobs_by_id = {}
+    for role in ("Associate", "Partner"):      # same two API calls
         r = requests.post(JOBS_API_ENDPOINT, headers=headers,
-                          json=payload(t), params=params)
+                          json=payload(role), params=params)
         r.raise_for_status()
-        jobs.extend(r.json().get("data", []))
-    return jobs
+        for rec in r.json()["data"]:
+            jobs_by_id[rec["id"]] = rec       # later duplicates overwrite
+    return list(jobs_by_id.values())
 
 @st.cache_data(ttl=24 * 3600)
 def fetch_attorneys_from_api(attorney_type="associates", days_range=90):
