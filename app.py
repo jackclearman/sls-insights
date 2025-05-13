@@ -1,8 +1,8 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # SLS Insights Dashboard  – full Streamlit app
-#   • plain-text fetch messages (no green success banners)
 #   • duplicates removed on FirmProspects ID
-#   • live counts in sub-headers + chart titles (jobs / placements)
+#   • live row-counts in headers + chart titles
+#   • new Job-Status dropdown (Open ▸ default, Closed, All)
 # ──────────────────────────────────────────────────────────────────────────────
 import os
 from datetime import datetime, timedelta
@@ -53,8 +53,7 @@ def fetch_jobs_from_api(days_range=30):
             "regions": {"items": ["California", "Washington-Seattle"],
                         "condition": "or", "use_second_location": True},
             "posted_date": {"min": start, "max": today},
-            "status": 1,
-            "titles": [role]                 # ← correct key
+            "titles": [role]                      # no status filter → returns open + closed
         }
 
     jobs_by_id = {}
@@ -107,6 +106,7 @@ def extract_job(j):
         "City": city,
         "Experience Range": exp_range,
         "Posted Date": j.get("postedDate", ""),
+        "Status Code": j.get("status"),                      # 1 = open, 0 = closed
         "Job Status": j.get("statusLabel", ""),
         "Job Type": j.get("title", [""])[0] if j.get("title") else "",
         "FirmProspects ID": j.get("id"),
@@ -181,7 +181,7 @@ with job_tab:
         job_df = job_df[job_df["Job Type"].str.contains("Partner",   na=False, case=False)]
 
     # top-level filters
-    col1,col2,col3 = st.columns(3)
+    col1,col2,col3,col4 = st.columns(4)
     with col1:
         amlaw_filter = st.selectbox("Filter by Am Law Ranking",
                                     ["All Firms","Am Law 50","Am Law 100"])
@@ -196,6 +196,9 @@ with job_tab:
         })
         practice_filter = st.selectbox("Filter by Practice Area",
                                        ["All Practice Areas"]+all_areas)
+    with col4:
+        status_filter = st.selectbox("Filter by Status",
+                                     ["Open Only","Closed Only","All Jobs"], index=0)
 
     df = job_df.copy()
     if amlaw_filter == "Am Law 50":
@@ -211,10 +214,15 @@ with job_tab:
     if practice_filter != "All Practice Areas":
         df = df[df["Practice Areas"].str.contains(practice_filter, na=False)]
 
+    if status_filter == "Open Only":
+        df = df[df["Status Code"] == 1]
+    elif status_filter == "Closed Only":
+        df = df[df["Status Code"] == 0]
+
     if df.empty:
         st.warning("No jobs match your filters."); st.stop()
 
-    jobs_count = len(df)  # ← live count
+    jobs_count = len(df)
 
     top_firms_tab, top_cities_tab, practice_tab, exp_tab = st.tabs(
         ["Top Firms","Top Cities","Practice Areas","Experience"])
@@ -235,7 +243,7 @@ with job_tab:
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
 
         detail_cols = ["Job Title","Firm","Practice Areas","City",
-                       "Experience Range","Posted Date","Firm Prospects Link"]
+                       "Experience Range","Posted Date","Job Status","Firm Prospects Link"]
         st.dataframe(df[df["Firm"].isin(s.index)][detail_cols],
                      hide_index=True, use_container_width=True)
 
@@ -307,7 +315,6 @@ with job_tab:
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
             st.dataframe(exp_df.sort_values("Min Years")[detail_cols],
                          hide_index=True, use_container_width=True)
-
 # --------------------------------------------------------------------------- #
 #  ATTORNEY PLACEMENTS TAB
 # --------------------------------------------------------------------------- #
