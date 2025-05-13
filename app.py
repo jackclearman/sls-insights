@@ -1,10 +1,8 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# SLS Insights Dashboard
-#  – plain-text fetch messages (no Streamlit success banners)
-#  – proper cache-refresh on date / role changes
-#  – Firm-Prospects hyperlinks in detail tables
-#  – restored “Experience” tab for placements
-#  – detail tables for Top Firms / Cities / Practice Areas in both tabs
+# SLS Insights Dashboard  – full Streamlit app
+#   • plain-text fetch messages (no green success banners)
+#   • duplicates removed on FirmProspects ID
+#   • live counts in sub-headers + chart titles (jobs / placements)
 # ──────────────────────────────────────────────────────────────────────────────
 import os
 from datetime import datetime, timedelta
@@ -40,7 +38,7 @@ def load_amlaw_data():
     except Exception:
         return pd.DataFrame(columns=["AmLaw Rank", "FP ID - Firm"])
 
-@st.cache_data(ttl=24 * 3600)
+@st.cache_data(ttl=24*3600)
 def fetch_jobs_from_api(days_range=30):
     key = get_api_key()
     if not key:
@@ -50,26 +48,25 @@ def fetch_jobs_from_api(days_range=30):
     start  = (datetime.now() - timedelta(days=days_range)).strftime("%Y-%m-%d")
     params = {"t": "", "page[limit]": 5000, "page[offset]": 0, "condition": "AND"}
 
-    def payload(title):
+    def payload(role):
         return {
             "regions": {"items": ["California", "Washington-Seattle"],
                         "condition": "or", "use_second_location": True},
             "posted_date": {"min": start, "max": today},
             "status": 1,
-            "titles": [title],
+            "titles": [role]                 # ← correct key
         }
 
-
     jobs_by_id = {}
-    for role in ("Associate", "Partner"):      # same two API calls
+    for role in ("Associate", "Partner"):
         r = requests.post(JOBS_API_ENDPOINT, headers=headers,
                           json=payload(role), params=params)
         r.raise_for_status()
-        for rec in r.json()["data"]:
-            jobs_by_id[rec["id"]] = rec       # later duplicates overwrite
+        for rec in r.json().get("data", []):
+            jobs_by_id[rec["id"]] = rec
     return list(jobs_by_id.values())
 
-@st.cache_data(ttl=24 * 3600)
+@st.cache_data(ttl=24*3600)
 def fetch_attorneys_from_api(attorney_type="associates", days_range=90):
     key = get_api_key()
     if not key:
@@ -166,10 +163,9 @@ with job_tab:
         st.session_state["jobs_fetch_days"] = period_days
         st.text(f"{len(st.session_state['job_raw']):,} jobs fetched from API.")
 
-    job_df = pd.DataFrame([extract_job(j) for j in st.session_state["job_raw"]])
     job_df = (pd.DataFrame([extract_job(j) for j in st.session_state["job_raw"]])
-                .drop_duplicates(subset="FirmProspects ID")
-                .reset_index(drop=True))
+              .drop_duplicates(subset="FirmProspects ID")
+              .reset_index(drop=True))
 
     # add Am Law
     amlaw_df = load_amlaw_data()
@@ -218,18 +214,24 @@ with job_tab:
     if df.empty:
         st.warning("No jobs match your filters."); st.stop()
 
+    jobs_count = len(df)  # ← live count
+
     top_firms_tab, top_cities_tab, practice_tab, exp_tab = st.tabs(
         ["Top Firms","Top Cities","Practice Areas","Experience"])
 
     # ---- Top Firms ---------------------------------------------------------
     with top_firms_tab:
-        st.subheader(f"Top Hiring Firms ({job_type})")
+        st.subheader(f"Top Hiring Firms ({job_type}) — {jobs_count:,} jobs")
         s      = df["Firm"].value_counts().head(10)
         bar_df = pd.DataFrame({"Firm":s.index,"Count":s.values})
-        fig = px.bar(bar_df, x="Firm", y="Count", color_discrete_sequence=[JOB_COLOR])
-        fig.update_layout(xaxis=dict(categoryorder="total descending"),
-                          xaxis_fixedrange=True, yaxis_fixedrange=True,
-                          margin=dict(t=10,b=10,l=10,r=10))
+        fig = px.bar(bar_df, x="Firm", y="Count",
+                     color_discrete_sequence=[JOB_COLOR])
+        fig.update_layout(
+            title_text=f"{jobs_count:,} {job_type.lower()} jobs",
+            xaxis=dict(categoryorder="total descending"),
+            xaxis_fixedrange=True, yaxis_fixedrange=True,
+            margin=dict(t=40,b=10,l=10,r=10)
+        )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
 
         detail_cols = ["Job Title","Firm","Practice Areas","City",
@@ -239,20 +241,24 @@ with job_tab:
 
     # ---- Top Cities --------------------------------------------------------
     with top_cities_tab:
-        st.subheader(f"Top Cities for {job_type} Jobs")
+        st.subheader(f"Top Cities for {job_type} Jobs — {jobs_count:,} jobs")
         s      = df["City"].value_counts().head(10)
         bar_df = pd.DataFrame({"City":s.index,"Count":s.values})
-        fig = px.bar(bar_df, x="City", y="Count", color_discrete_sequence=[JOB_COLOR])
-        fig.update_layout(xaxis=dict(categoryorder="total descending"),
-                          xaxis_fixedrange=True, yaxis_fixedrange=True,
-                          margin=dict(t=10,b=10,l=10,r=10))
+        fig = px.bar(bar_df, x="City", y="Count",
+                     color_discrete_sequence=[JOB_COLOR])
+        fig.update_layout(
+            title_text=f"{jobs_count:,} {job_type.lower()} jobs",
+            xaxis=dict(categoryorder="total descending"),
+            xaxis_fixedrange=True, yaxis_fixedrange=True,
+            margin=dict(t=40,b=10,l=10,r=10)
+        )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
         st.dataframe(df[df["City"].isin(s.index)][detail_cols],
                      hide_index=True, use_container_width=True)
 
     # ---- Practice Areas ----------------------------------------------------
     with practice_tab:
-        st.subheader(f"Top Practice Areas ({job_type})")
+        st.subheader(f"Top Practice Areas ({job_type}) — {jobs_count:,} jobs")
         areas = [
             a.strip()
             for s in df["Practice Areas"].dropna()
@@ -262,9 +268,12 @@ with job_tab:
         bar_df = pd.DataFrame({"Practice Area":s.index,"Count":s.values})
         fig = px.bar(bar_df, x="Practice Area", y="Count",
                      color_discrete_sequence=[JOB_COLOR])
-        fig.update_layout(xaxis=dict(categoryorder="total descending"),
-                          xaxis_fixedrange=True,yaxis_fixedrange=True,
-                          margin=dict(t=10,b=10,l=10,r=10))
+        fig.update_layout(
+            title_text=f"{jobs_count:,} {job_type.lower()} jobs",
+            xaxis=dict(categoryorder="total descending"),
+            xaxis_fixedrange=True,yaxis_fixedrange=True,
+            margin=dict(t=40,b=10,l=10,r=10)
+        )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
 
         mask = df["Practice Areas"].fillna("").apply(
@@ -275,7 +284,7 @@ with job_tab:
 
     # ---- Experience --------------------------------------------------------
     with exp_tab:
-        st.subheader(f"{job_type} Job Listings by Experience")
+        st.subheader(f"{job_type} Job Listings by Experience — {jobs_count:,} jobs")
         exp_df = df[df["Experience Range"].str.contains(r"\d", na=False)].copy()
         if exp_df.empty:
             st.info("Experience information missing.")
@@ -290,8 +299,11 @@ with job_tab:
                       [["Experience Required","Number of Jobs"]])
             fig = px.bar(bar_df, x="Experience Required", y="Number of Jobs",
                          color_discrete_sequence=[JOB_COLOR])
-            fig.update_layout(xaxis_fixedrange=True, yaxis_fixedrange=True,
-                              margin=dict(t=10,b=10,l=10,r=10))
+            fig.update_layout(
+                title_text=f"{jobs_count:,} {job_type.lower()} jobs",
+                xaxis_fixedrange=True, yaxis_fixedrange=True,
+                margin=dict(t=40,b=10,l=10,r=10)
+            )
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
             st.dataframe(exp_df.sort_values("Min Years")[detail_cols],
                          hide_index=True, use_container_width=True)
@@ -363,18 +375,24 @@ with atty_tab:
     if df.empty:
         st.warning("No placements match your filters."); st.stop()
 
+    placements_count = len(df)  # ← live count
+
     top_firms_tab, top_cities_tab, practice_tab, exp_tab = st.tabs(
         ["Top Firms","Top Cities","Practice Areas","Experience"])
 
     # ---- Top Destination Firms --------------------------------------------
     with top_firms_tab:
-        st.subheader(f"Top Destination Firms ({role_type})")
+        st.subheader(f"Top Destination Firms ({role_type}) — {placements_count:,} placements")
         s      = df["To Firm"].value_counts().head(10)
         bar_df = pd.DataFrame({"Firm":s.index,"Count":s.values})
-        fig = px.bar(bar_df, x="Firm", y="Count", color_discrete_sequence=[ATTY_COLOR])
-        fig.update_layout(xaxis=dict(categoryorder="total descending"),
-                          xaxis_fixedrange=True,yaxis_fixedrange=True,
-                          margin=dict(t=10,b=10,l=10,r=10))
+        fig = px.bar(bar_df, x="Firm", y="Count",
+                     color_discrete_sequence=[ATTY_COLOR])
+        fig.update_layout(
+            title_text=f"{placements_count:,} {role_type.lower()} placements",
+            xaxis=dict(categoryorder="total descending"),
+            xaxis_fixedrange=True,yaxis_fixedrange=True,
+            margin=dict(t=40,b=10,l=10,r=10)
+        )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
         detail_cols = ["Name","From Firm","To Firm","Practice Areas",
                        "City","Title","Move Date"]
@@ -383,20 +401,24 @@ with atty_tab:
 
     # ---- Top Cities --------------------------------------------------------
     with top_cities_tab:
-        st.subheader(f"Top Cities for {role_type} Moves")
+        st.subheader(f"Top Cities for {role_type} Moves — {placements_count:,} placements")
         s      = df["City"].value_counts().head(10)
         bar_df = pd.DataFrame({"City":s.index,"Count":s.values})
-        fig = px.bar(bar_df, x="City", y="Count", color_discrete_sequence=[ATTY_COLOR])
-        fig.update_layout(xaxis=dict(categoryorder="total descending"),
-                          xaxis_fixedrange=True,yaxis_fixedrange=True,
-                          margin=dict(t=10,b=10,l=10,r=10))
+        fig = px.bar(bar_df, x="City", y="Count",
+                     color_discrete_sequence=[ATTY_COLOR])
+        fig.update_layout(
+            title_text=f"{placements_count:,} {role_type.lower()} placements",
+            xaxis=dict(categoryorder="total descending"),
+            xaxis_fixedrange=True,yaxis_fixedrange=True,
+            margin=dict(t=40,b=10,l=10,r=10)
+        )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
         st.dataframe(df[df["City"].isin(s.index)][detail_cols],
                      hide_index=True, use_container_width=True)
 
     # ---- Practice Areas ----------------------------------------------------
     with practice_tab:
-        st.subheader(f"Top Practice Areas ({role_type})")
+        st.subheader(f"Top Practice Areas ({role_type}) — {placements_count:,} placements")
         areas = [
             a.strip()
             for s in df["Practice Areas"].dropna()
@@ -406,9 +428,12 @@ with atty_tab:
         bar_df = pd.DataFrame({"Practice Area":s.index,"Count":s.values})
         fig = px.bar(bar_df, x="Practice Area", y="Count",
                      color_discrete_sequence=[ATTY_COLOR])
-        fig.update_layout(xaxis=dict(categoryorder="total descending"),
-                          xaxis_fixedrange=True,yaxis_fixedrange=True,
-                          margin=dict(t=10,b=10,l=10,r=10))
+        fig.update_layout(
+            title_text=f"{placements_count:,} {role_type.lower()} placements",
+            xaxis=dict(categoryorder="total descending"),
+            xaxis_fixedrange=True,yaxis_fixedrange=True,
+            margin=dict(t=40,b=10,l=10,r=10)
+        )
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
 
         mask = df["Practice Areas"].fillna("").apply(
@@ -419,7 +444,7 @@ with atty_tab:
 
     # ---- Experience --------------------------------------------------------
     with exp_tab:
-        st.subheader(f"{role_type} Experience Distribution")
+        st.subheader(f"{role_type} Experience Distribution — {placements_count:,} placements")
         exp = df.copy()
         exp["Graduation Year"] = pd.to_numeric(exp["Graduation Year"], errors="coerce")
         exp = exp.dropna(subset=["Graduation Year"])
@@ -434,8 +459,11 @@ with atty_tab:
             bar_df = pd.DataFrame({"Experience":s.index,"Count":s.values})
             fig = px.bar(bar_df, x="Experience", y="Count",
                          color_discrete_sequence=[ATTY_COLOR])
-            fig.update_layout(xaxis_fixedrange=True,yaxis_fixedrange=True,
-                              margin=dict(t=10,b=10,l=10,r=10))
+            fig.update_layout(
+                title_text=f"{placements_count:,} {role_type.lower()} placements",
+                xaxis_fixedrange=True,yaxis_fixedrange=True,
+                margin=dict(t=40,b=10,l=10,r=10)
+            )
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
             exp_cols = ["Name","From Firm","To Firm","Practice Areas","City",
                         "Title","Graduation Year","Years Since JD","Bracket","Move Date"]
