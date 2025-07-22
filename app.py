@@ -12,10 +12,6 @@ import plotly.express as px
 import requests
 import streamlit as st
 
-# ─── Streamlit page config ────────────────────────────────────────────────────
-st.set_page_config(page_title="Legal Recruiting Dashboard", layout="wide")
-st.title("SLS Insights Dashboard")
-
 # ─── API endpoints ────────────────────────────────────────────────────────────
 JOBS_API_ENDPOINT      = "https://developer.firmprospects.com/v1/jobs"
 ATTORNEYS_API_ENDPOINT = "https://developer.firmprospects.com/v1/attorneys"
@@ -121,7 +117,10 @@ def extract_attorney(a):
     move   = recent.get("firm") or {}
     firm   = a.get("firm", {})
     ranks  = firm.get("ranks", {})
+    move_date = recent.get("date") or (a.get("experience", {}) or {}).get("last_move_date")
     return {
+        "id": a.get("id"),  # for table display
+        "last_move_date": move_date,  # for table display
         "Name": f"{a.get('first_name','')} {a.get('last_name','')}",
         "From Firm": move.get("old", {}).get("firm_name"),
         "To Firm": move.get("new", {}).get("firm_name"),
@@ -136,7 +135,7 @@ def extract_attorney(a):
         "Profile Link": f"[Link](https://engage.firmprospects.com/attorneys/profile/{a.get('id')})",
         "Am Law Ranking": ranks.get("top200"),
         "Region": a.get("location", {}).get("state"),
-        "Move Date": recent.get("date"),
+        "Move Date": move_date,
         "Firm ID": firm.get("id"),
     }
 
@@ -144,12 +143,13 @@ def extract_attorney(a):
 JOB_COLOR  = "#636EFA"
 ATTY_COLOR = "#EF553B"
 
-# ─── layout ──────────────────────────────────────────────────────────────────
-job_tab, atty_tab = st.tabs(["Job Postings", "Attorney Placements"])
 
-# --------------------------------------------------------------------------- #
-#  JOB POSTINGS TAB
-# --------------------------------------------------------------------------- #
+# ─── layout ──────────────────────────────────────────────────────────────────
+job_tab, atty_tab, report_tab = st.tabs(["Job Postings", "Attorney Placements", "Monthly Report"])
+
+## --------------------------------------------------------------------------- #
+##  JOB POSTINGS TAB
+## --------------------------------------------------------------------------- #
 with job_tab:
     period_label = st.selectbox("Select Time Period",
         ["Last 7 days", "Last 14 days", "Last 30 days", "Last 60 days"], index=2)
@@ -315,10 +315,154 @@ with job_tab:
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
             st.dataframe(exp_df.sort_values("Min Years")[detail_cols],
                          hide_index=True, use_container_width=True)
+## --------------------------------------------------------------------------- #
+##  ATTORNEY PLACEMENTS TAB
+## --------------------------------------------------------------------------- #
 # --------------------------------------------------------------------------- #
 #  ATTORNEY PLACEMENTS TAB
 # --------------------------------------------------------------------------- #
 with atty_tab:
+    pass
+# --------------------------------------------------------------------------- #
+#  MONTHLY REPORT TAB
+# --------------------------------------------------------------------------- #
+with report_tab:
+    # Indented block for Monthly Report tab
+    st.header("\U0001F4C4 Monthly Report - Last 30 Days")
+    from copy import deepcopy
+    report_type = st.radio(
+        "Select Report Type",
+        ["Associates", "Partners"],
+        horizontal=True,
+        key="monthly_report_type_app"
+    )
+    with st.spinner("Loading monthly data..."):
+        if "monthly_jobs_raw" not in st.session_state:
+            st.session_state["monthly_jobs_raw"] = fetch_jobs_from_api(30)
+        atty_key = "associates" if report_type == "Associates" else "partners"
+        if "monthly_atty_raw" not in st.session_state or st.session_state.get("monthly_atty_type") != atty_key:
+            st.session_state["monthly_atty_raw"] = fetch_attorneys_from_api(atty_key, 30)
+            st.session_state["monthly_atty_type"] = atty_key
+    job_df = pd.DataFrame([extract_job(j) for j in st.session_state["monthly_jobs_raw"]])
+    atty_df = pd.DataFrame([extract_attorney(a) for a in st.session_state["monthly_atty_raw"]])
+    amlaw_df = load_amlaw_data()
+    if not job_df.empty and not amlaw_df.empty:
+        job_df["Firm ID"] = pd.to_numeric(job_df["Firm ID"], errors="coerce")
+        mapping = dict(zip(amlaw_df["FP ID - Firm"], amlaw_df["AmLaw Rank"]))
+        job_df["Am Law Ranking"] = job_df["Firm ID"].map(mapping).astype("Int64")
+    if not atty_df.empty and not amlaw_df.empty:
+        atty_df["Firm ID"] = pd.to_numeric(atty_df["Firm ID"], errors="coerce")
+        mapping = dict(zip(amlaw_df["FP ID - Firm"], amlaw_df["AmLaw Rank"]))
+        atty_df["Am Law Ranking"] = atty_df["Firm ID"].map(mapping).astype("Int64")
+    if not job_df.empty:
+        if report_type == "Associates":
+            job_df = job_df[job_df["Job Type"].str.contains("Associate", na=False, case=False)]
+        else:
+            job_df = job_df[job_df["Job Type"].str.contains("Partner", na=False, case=False)]
+        job_df = job_df.drop_duplicates(subset=["Job Title", "Firm"], keep="first")
+    def generate_email_report_text(job_df, atty_df, report_type):
+        lines = []
+        lines.append(f"MONTHLY REPORT – {report_type.upper()} (Last 30 Days)")
+        lines.append("")
+        lines.append("PLACEMENTS:")
+        if atty_df.empty:
+            lines.append("  No placements in the last 30 days.")
+        else:
+            top_firms = atty_df["To Firm"].value_counts().head(10)
+            lines.append("  Top 10 Destination Firms:")
+            for i, (firm, count) in enumerate(top_firms.items(), 1):
+                lines.append(f"    {i}. {firm} ({count})")
+            lines.append("")
+            areas = [a.strip() for s in atty_df["Practice Areas"].dropna() for a in s.split(",") if a.strip()]
+            top_areas = pd.Series(areas).value_counts().head(5)
+            lines.append("  Top 5 Practice Areas:")
+            for i, (area, count) in enumerate(top_areas.items(), 1):
+                lines.append(f"    {i}. {area} ({count})")
+            lines.append("")
+            specialties = [a.strip() for s in atty_df["Specialties"].dropna() for a in s.split(",") if a.strip()]
+            top_specialties = pd.Series(specialties).value_counts().head(5)
+            lines.append("  Top 5 Specialties:")
+            for i, (spec, count) in enumerate(top_specialties.items(), 1):
+                lines.append(f"    {i}. {spec} ({count})")
+            lines.append("")
+            top_cities = atty_df["City"].value_counts().head(5)
+            lines.append("  Top 5 Cities:")
+            for i, (city, count) in enumerate(top_cities.items(), 1):
+                lines.append(f"    {i}. {city} ({count})")
+            lines.append("")
+            grad_years = atty_df["Graduation Year"].dropna().astype(str)
+            top_years = grad_years.value_counts().head(5)
+            lines.append("  Top 5 Graduation Years:")
+            for i, (year, count) in enumerate(top_years.items(), 1):
+                lines.append(f"    {i}. {year} ({count} placements)")
+            lines.append("")
+        lines.append("")
+        lines.append("JOB POSTINGS:")
+        if job_df.empty:
+            lines.append("  No job postings in the last 30 days.")
+        else:
+            top_hiring_firms = job_df["Firm"].value_counts().head(10)
+            lines.append("  Top 10 Hiring Firms:")
+            for i, (firm, count) in enumerate(top_hiring_firms.items(), 1):
+                lines.append(f"    {i}. {firm} ({count})")
+            lines.append("")
+            areas = [a.strip() for s in job_df["Practice Areas"].dropna() for a in s.split(",") if a.strip()]
+            top_areas = pd.Series(areas).value_counts().head(5)
+            lines.append("  Top 5 Practice Areas:")
+            for i, (area, count) in enumerate(top_areas.items(), 1):
+                lines.append(f"    {i}. {area} ({count})")
+            lines.append("")
+            specialties = [a.strip() for s in job_df["Specialties"].dropna() for a in s.split(",") if a.strip()]
+            top_specialties = pd.Series(specialties).value_counts().head(5)
+            lines.append("  Top 5 Specialties:")
+            for i, (spec, count) in enumerate(top_specialties.items(), 1):
+                lines.append(f"    {i}. {spec} ({count})")
+            lines.append("")
+            top_cities = job_df["City"].value_counts().head(5)
+            lines.append("  Top 5 Cities:")
+            for i, (city, count) in enumerate(top_cities.items(), 1):
+                lines.append(f"    {i}. {city} ({count})")
+            lines.append("")
+            if "Experience Range" in job_df.columns:
+                exp_ranges = job_df["Experience Range"].dropna()
+                top_exp = exp_ranges.value_counts().head(5)
+                lines.append("  Top 5 Experience Requirements:")
+                for i, (exp, count) in enumerate(top_exp.items(), 1):
+                    lines.append(f"    {i}. {exp} ({count})")
+                lines.append("")
+        return "\n".join(lines)
+    st.subheader("\U0001F4E7 Email Report Format")
+    st.text_area(
+        "Copy this text for your email:",
+        value=generate_email_report_text(job_df, atty_df, report_type),
+        height=600,
+        help="This report is formatted for easy copy-paste into emails"
+    )
+    # Tip removed as requested
+    st.markdown("---")
+    st.subheader("All Lateral Movements (Last 30 Days)")
+    if atty_df.empty:
+        st.info("No lateral movements in the last 30 days.")
+    else:
+        expected_cols = [
+            ("id", "ID"),
+            ("Name", "Name"),
+            ("From Firm", "From Firm"),
+            ("To Firm", "To Firm"),
+            ("Practice Areas", "Practice Areas"),
+            ("City", "City"),
+            ("Title", "Title"),
+            ("last_move_date", "Move Date")
+        ]
+        data = {}
+        for col, _ in expected_cols:
+            if col in atty_df.columns:
+                data[col] = atty_df[col]
+            else:
+                data[col] = ["" for _ in range(len(atty_df))]
+        display_df = pd.DataFrame(data)
+        display_df.columns = [disp for _, disp in expected_cols]
+        st.dataframe(display_df.head(2000), use_container_width=True)
     atty_period = st.selectbox("Select Time Period",
         ["Last 1 month","Last 2 months","Last 3 months","Last 6 months"],
         index=2, key="atty_period")
