@@ -15,7 +15,9 @@ import streamlit as st
 # ─── API endpoints ────────────────────────────────────────────────────────────
 JOBS_API_ENDPOINT      = "https://developer.firmprospects.com/v1/jobs"
 ATTORNEYS_API_ENDPOINT = "https://developer.firmprospects.com/v1/attorneys"
-
+# ─── Streamlit page config ────────────────────────────────────────────────────
+st.set_page_config(page_title="Legal Recruiting Dashboard", layout="wide")
+st.title("SLS Insights Dashboard")
 # ─── helpers ──────────────────────────────────────────────────────────────────
 def get_api_key():
     try:
