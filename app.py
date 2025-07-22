@@ -568,7 +568,12 @@ with report_tab:
             atty_df = atty_df[(atty_df["last_move_date"] >= start_date) & (atty_df["last_move_date"] <= end_date)]
     def generate_email_report_text(job_df, atty_df, report_type):
         lines = []
-        lines.append(f"MONTHLY REPORT – {report_type.upper()} (Last 30 Days)")
+        # Use selected_month_label from outer scope if available, else fallback
+        try:
+            month_label = selected_month_label
+        except NameError:
+            month_label = datetime.now().strftime("%B %Y")
+        lines.append(f"MONTHLY REPORT – {report_type.upper()} ({month_label})")
         lines.append("")
         lines.append("PLACEMENTS:")
         if atty_df.empty:
@@ -596,12 +601,13 @@ with report_tab:
             for i, (city, count) in enumerate(top_cities.items(), 1):
                 lines.append(f"    {i}. {city} ({count})")
             lines.append("")
-            grad_years = atty_df["Graduation Year"].dropna().astype(str)
-            top_years = grad_years.value_counts().head(5)
-            lines.append("  Top 5 Graduation Years:")
-            for i, (year, count) in enumerate(top_years.items(), 1):
-                lines.append(f"    {i}. {year} ({count} placements)")
-            lines.append("")
+        grad_years = atty_df["Graduation Year"].dropna()
+        grad_years_rounded = grad_years.astype(float).round(0).astype(int).astype(str)
+        top_years = grad_years_rounded.value_counts().head(5)
+        lines.append("  Top 5 JD Year:")
+        for i, (year, count) in enumerate(top_years.items(), 1):
+            lines.append(f"    {i}. {year} ({count} placements)")
+        lines.append("")
         lines.append("")
         lines.append("JOB POSTINGS:")
         if job_df.empty:
