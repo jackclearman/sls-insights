@@ -646,19 +646,26 @@ with report_tab:
     )
     # Tip removed as requested
     st.markdown("---")
-    st.subheader("All Lateral Movements (Last 30 Days)")
+    # Table title with month and year
+    st.subheader(f"All Lateral Movements ({selected_month_label})")
     if atty_df.empty:
         st.info("No lateral movements in the last 30 days.")
     else:
-        # --- Add filters (Am Law Ranking, Region, Practice Area) ---
-        col1, col2, col3 = st.columns(3)
+        # --- Add filters (Am Law 200/Non-Am Law, Am Law Ranking, Region, Practice Area) ---
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
+            firm_type = st.selectbox(
+                "Firm Type",
+                ["All Firms", "Am Law 50", "Am Law 100", "Am Law 200", "Non-Am Law"],
+                key="monthly_firm_type"
+            )
+        with col2:
             amlaw_filter = st.selectbox(
                 "Filter by Am Law Ranking",
                 ["All Firms", "Am Law 50", "Am Law 100"],
                 key="monthly_amlaw"
             )
-        with col2:
+        with col3:
             region_options = ["All Regions"]
             if "Region" in atty_df.columns:
                 region_options = sorted(set(atty_df["Region"].dropna().unique()))
@@ -668,7 +675,7 @@ with report_tab:
                 region_options,
                 key="monthly_region"
             )
-        with col3:
+        with col4:
             all_atty_areas = sorted({
                 a.strip()
                 for s in atty_df["Practice Areas"].dropna()
@@ -682,6 +689,21 @@ with report_tab:
 
         # --- Apply filters ---
         filtered_df = atty_df.copy()
+        # Firm type filter
+        if firm_type == "Am Law 50":
+            if "Am Law Ranking" in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df["Am Law Ranking"].notna() & (filtered_df["Am Law Ranking"] <= 50)]
+        elif firm_type == "Am Law 100":
+            if "Am Law Ranking" in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df["Am Law Ranking"].notna() & (filtered_df["Am Law Ranking"] <= 100)]
+        elif firm_type == "Am Law 200":
+            if "Am Law Ranking" in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df["Am Law Ranking"].notna()]
+        elif firm_type == "Non-Am Law":
+            if "Am Law Ranking" in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df["Am Law Ranking"].isna()]
+
+        # Am Law Ranking filter (still allow secondary filter)
         if amlaw_filter == "Am Law 50":
             if "Am Law Ranking" in filtered_df.columns:
                 filtered_df = filtered_df[filtered_df["Am Law Ranking"].notna() & (filtered_df["Am Law Ranking"] <= 50)]
