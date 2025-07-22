@@ -37,13 +37,17 @@ def load_amlaw_data():
         return pd.DataFrame(columns=["AmLaw Rank", "FP ID - Firm"])
 
 @st.cache_data(ttl=24*3600)
-def fetch_jobs_from_api(days_range=30):
+def fetch_jobs_from_api(days_range=30, start_date=None, end_date=None):
     key = get_api_key()
     if not key:
         return []
     headers = {"X-AUTH-TOKEN": key, "Content-Type": "application/json"}
-    today  = datetime.now().strftime("%Y-%m-%d")
-    start  = (datetime.now() - timedelta(days=days_range)).strftime("%Y-%m-%d")
+    if start_date is not None and end_date is not None:
+        start = start_date.strftime("%Y-%m-%d")
+        today = end_date.strftime("%Y-%m-%d")
+    else:
+        today  = datetime.now().strftime("%Y-%m-%d")
+        start  = (datetime.now() - timedelta(days=days_range)).strftime("%Y-%m-%d")
     params = {"t": "", "page[limit]": 5000, "page[offset]": 0, "condition": "AND"}
 
     def payload(role):
@@ -64,13 +68,17 @@ def fetch_jobs_from_api(days_range=30):
     return list(jobs_by_id.values())
 
 @st.cache_data(ttl=24*3600)
-def fetch_attorneys_from_api(attorney_type="associates", days_range=90):
+def fetch_attorneys_from_api(attorney_type="associates", days_range=90, start_date=None, end_date=None):
     key = get_api_key()
     if not key:
         return []
     headers = {"X-AUTH-TOKEN": key, "Content-Type": "application/json"}
-    today  = datetime.now().strftime("%Y-%m-%d")
-    start  = (datetime.now() - timedelta(days=days_range)).strftime("%Y-%m-%d")
+    if start_date is not None and end_date is not None:
+        today = end_date.strftime("%Y-%m-%d")
+        start = start_date.strftime("%Y-%m-%d")
+    else:
+        today  = datetime.now().strftime("%Y-%m-%d")
+        start  = (datetime.now() - timedelta(days=days_range)).strftime("%Y-%m-%d")
     params = {"t": "", "page[limit]": 5000, "page[offset]": 0, "condition": "AND"}
 
     payload = {
@@ -489,23 +497,45 @@ with atty_tab:
 # --------------------------------------------------------------------------- #
 with report_tab:
     # Indented block for Monthly Report tab
-    st.header("\U0001F4C4 Monthly Report - Last 30 Days")
+    st.header("\U0001F4C4 Monthly Report")
     from copy import deepcopy
+    # --- Calendar month filter ---
+    import calendar
+    today = datetime.now()
+    months = []
+    for i in range(12):
+        dt = today.replace(day=1) - pd.DateOffset(months=i)
+        months.append((dt.strftime("%B %Y"), dt.year, dt.month))
+    month_labels = [m[0] for m in months]
+    default_month_idx = 0
+    selected_month_label = st.selectbox("Select Month", month_labels, index=default_month_idx, key="monthly_report_month")
+    selected_year, selected_month = [(y, m) for lbl, y, m in months if lbl == selected_month_label][0]
+    # Calculate start and end date for the selected month (make tz-naive)
+    start_date = datetime(selected_year, selected_month, 1)
+    end_date = (start_date + pd.DateOffset(months=1)) - pd.Timedelta(days=1)
+    # Ensure tz-naive for comparison
+    start_date = start_date.replace(tzinfo=None)
+    end_date = end_date.replace(tzinfo=None)
     report_type = st.radio(
         "Select Report Type",
         ["Associates", "Partners"],
         horizontal=True,
         key="monthly_report_type_app"
     )
+    # --- Fetch data for selected month ---
+    days_range = (end_date - start_date).days + 1
     with st.spinner("Loading monthly data..."):
-        if "monthly_jobs_raw" not in st.session_state:
-            st.session_state["monthly_jobs_raw"] = fetch_jobs_from_api(30)
+        # Use a session key that includes the month and year for caching
+        jobs_key = f"monthly_jobs_raw_{selected_year}_{selected_month}"
         atty_key = "associates" if report_type == "Associates" else "partners"
-        if "monthly_atty_raw" not in st.session_state or st.session_state.get("monthly_atty_type") != atty_key:
-            st.session_state["monthly_atty_raw"] = fetch_attorneys_from_api(atty_key, 30)
-            st.session_state["monthly_atty_type"] = atty_key
-    job_df = pd.DataFrame([extract_job(j) for j in st.session_state["monthly_jobs_raw"]])
-    atty_df = pd.DataFrame([extract_attorney(a) for a in st.session_state["monthly_atty_raw"]])
+        atty_data_key = f"monthly_atty_raw_{atty_key}_{selected_year}_{selected_month}"
+        if jobs_key not in st.session_state:
+            st.session_state[jobs_key] = fetch_jobs_from_api(days_range, start_date, end_date)
+        if atty_data_key not in st.session_state or st.session_state.get(f"monthly_atty_type_{selected_year}_{selected_month}") != atty_key:
+            st.session_state[atty_data_key] = fetch_attorneys_from_api(atty_key, days_range, start_date, end_date)
+            st.session_state[f"monthly_atty_type_{selected_year}_{selected_month}"] = atty_key
+    job_df = pd.DataFrame([extract_job(j) for j in st.session_state[jobs_key]])
+    atty_df = pd.DataFrame([extract_attorney(a) for a in st.session_state[atty_data_key]])
     amlaw_df = load_amlaw_data()
     if not job_df.empty and not amlaw_df.empty:
         job_df["Firm ID"] = pd.to_numeric(job_df["Firm ID"], errors="coerce")
@@ -515,12 +545,27 @@ with report_tab:
         atty_df["Firm ID"] = pd.to_numeric(atty_df["Firm ID"], errors="coerce")
         mapping = dict(zip(amlaw_df["FP ID - Firm"], amlaw_df["AmLaw Rank"]))
         atty_df["Am Law Ranking"] = atty_df["Firm ID"].map(mapping).astype("Int64")
+    # --- Filter by selected month (Move Date for atty_df, Posted Date for job_df) ---
     if not job_df.empty:
         if report_type == "Associates":
             job_df = job_df[job_df["Job Type"].str.contains("Associate", na=False, case=False)]
         else:
             job_df = job_df[job_df["Job Type"].str.contains("Partner", na=False, case=False)]
         job_df = job_df.drop_duplicates(subset=["Job Title", "Firm"], keep="first")
+        # Filter jobs by posted date in selected month
+        if "Posted Date" in job_df.columns:
+            job_df["Posted Date"] = pd.to_datetime(job_df["Posted Date"], errors="coerce")
+            # Remove timezone info if present
+            if pd.api.types.is_datetime64_any_dtype(job_df["Posted Date"]):
+                job_df["Posted Date"] = job_df["Posted Date"].dt.tz_localize(None)
+            job_df = job_df[(job_df["Posted Date"] >= start_date) & (job_df["Posted Date"] <= end_date)]
+    if not atty_df.empty:
+        # Filter attorneys by move date in selected month
+        if "last_move_date" in atty_df.columns:
+            atty_df["last_move_date"] = pd.to_datetime(atty_df["last_move_date"], errors="coerce")
+            if pd.api.types.is_datetime64_any_dtype(atty_df["last_move_date"]):
+                atty_df["last_move_date"] = atty_df["last_move_date"].dt.tz_localize(None)
+            atty_df = atty_df[(atty_df["last_move_date"] >= start_date) & (atty_df["last_move_date"] <= end_date)]
     def generate_email_report_text(job_df, atty_df, report_type):
         lines = []
         lines.append(f"MONTHLY REPORT – {report_type.upper()} (Last 30 Days)")
