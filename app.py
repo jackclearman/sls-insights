@@ -605,23 +605,71 @@ with report_tab:
     if atty_df.empty:
         st.info("No lateral movements in the last 30 days.")
     else:
-        expected_cols = [
-            ("id", "ID"),
-            ("Name", "Name"),
-            ("From Firm", "From Firm"),
-            ("To Firm", "To Firm"),
-            ("Practice Areas", "Practice Areas"),
-            ("City", "City"),
-            ("Title", "Title"),
-            ("last_move_date", "Move Date")
-        ]
-        data = {}
-        for col, _ in expected_cols:
-            if col in atty_df.columns:
-                data[col] = atty_df[col]
-            else:
-                data[col] = ["" for _ in range(len(atty_df))]
-        display_df = pd.DataFrame(data)
-        display_df.columns = [disp for _, disp in expected_cols]
-        st.dataframe(display_df.head(2000), use_container_width=True)
+        # --- Add filters (Am Law Ranking, Region, Practice Area) ---
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            amlaw_filter = st.selectbox(
+                "Filter by Am Law Ranking",
+                ["All Firms", "Am Law 50", "Am Law 100"],
+                key="monthly_amlaw"
+            )
+        with col2:
+            region_options = ["All Regions"]
+            if "Region" in atty_df.columns:
+                region_options = sorted(set(atty_df["Region"].dropna().unique()))
+                region_options = ["All Regions"] + region_options
+            region_filter = st.selectbox(
+                "Filter by Region",
+                region_options,
+                key="monthly_region"
+            )
+        with col3:
+            all_atty_areas = sorted({
+                a.strip()
+                for s in atty_df["Practice Areas"].dropna()
+                for a in s.split(",") if a.strip()
+            })
+            practice_filter = st.selectbox(
+                "Filter by Practice Area",
+                ["All Practice Areas"] + all_atty_areas,
+                key="monthly_practice"
+            )
+
+        # --- Apply filters ---
+        filtered_df = atty_df.copy()
+        if amlaw_filter == "Am Law 50":
+            if "Am Law Ranking" in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df["Am Law Ranking"].notna() & (filtered_df["Am Law Ranking"] <= 50)]
+        elif amlaw_filter == "Am Law 100":
+            if "Am Law Ranking" in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df["Am Law Ranking"].notna() & (filtered_df["Am Law Ranking"] <= 100)]
+
+        if region_filter != "All Regions" and "Region" in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df["Region"] == region_filter]
+
+        if practice_filter != "All Practice Areas":
+            filtered_df = filtered_df[filtered_df["Practice Areas"].str.contains(practice_filter, na=False)]
+
+        if filtered_df.empty:
+            st.warning("No placements match your filters.")
+        else:
+            expected_cols = [
+                ("id", "ID"),
+                ("Name", "Name"),
+                ("From Firm", "From Firm"),
+                ("To Firm", "To Firm"),
+                ("Practice Areas", "Practice Areas"),
+                ("City", "City"),
+                ("Title", "Title"),
+                ("last_move_date", "Move Date")
+            ]
+            data = {}
+            for col, _ in expected_cols:
+                if col in filtered_df.columns:
+                    data[col] = filtered_df[col]
+                else:
+                    data[col] = ["" for _ in range(len(filtered_df))]
+            display_df = pd.DataFrame(data)
+            display_df.columns = [disp for _, disp in expected_cols]
+            st.dataframe(display_df.head(2000), use_container_width=True)
     
