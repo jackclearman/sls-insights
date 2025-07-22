@@ -637,11 +637,13 @@ with report_tab:
             lines.append("")
             if "Experience Range" in job_df.columns:
                 exp_ranges = job_df["Experience Range"].dropna()
+                exp_ranges = exp_ranges[exp_ranges.str.strip() != ""]  # Exclude blank/empty
                 top_exp = exp_ranges.value_counts().head(5)
-                lines.append("  Top 5 Experience Requirements:")
-                for i, (exp, count) in enumerate(top_exp.items(), 1):
-                    lines.append(f"    {i}. {exp} ({count})")
-                lines.append("")
+                if not top_exp.empty:
+                    lines.append("  Top 5 Experience Requirements:")
+                    for i, (exp, count) in enumerate(top_exp.items(), 1):
+                        lines.append(f"    {i}. {exp} ({count})")
+                    lines.append("")
         return "\n".join(lines)
     st.subheader("\U0001F4E7 Email Report Format")
     st.text_area(
