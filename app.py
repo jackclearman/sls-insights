@@ -626,11 +626,11 @@ with report_tab:
         st.dataframe(display_df.head(2000), use_container_width=True)
     atty_period = st.selectbox("Select Time Period",
         ["Last 1 month","Last 2 months","Last 3 months","Last 6 months"],
-        index=2, key="atty_period")
+        index=2, key="monthly_atty_period")
     atty_days = {"Last 1 month":30,"Last 2 months":60,"Last 3 months":90,"Last 6 months":180}[atty_period]
 
     role_type = st.radio("Select Attorney Type", ["Partners","Associates"],
-                         horizontal=True, key="atty_role")
+                         horizontal=True, key="monthly_atty_role")
     atty_key = "partners" if role_type=="Partners" else "associates"
 
     if ("atty_raw" not in st.session_state or
@@ -655,11 +655,11 @@ with report_tab:
     with col1:
         amlaw_filter = st.selectbox("Filter by Am Law Ranking",
                                     ["All Firms","Am Law 50","Am Law 100"],
-                                    key="atty_amlaw")
+                                    key="monthly_atty_amlaw")
     with col2:
         region_filter = st.selectbox("Filter by Region",
                                      ["California Only","Washington Only","All Regions"],
-                                     key="atty_region")
+                                     key="monthly_atty_region")
     with col3:
         all_atty_areas = sorted({
             a.strip()
@@ -668,7 +668,7 @@ with report_tab:
         })
         practice_filter = st.selectbox("Filter by Practice Area",
                                        ["All Practice Areas"]+all_atty_areas,
-                                       key="atty_practice")
+                                       key="monthly_atty_practice")
 
     df = atty_df.copy()
     if amlaw_filter=="Am Law 50":
