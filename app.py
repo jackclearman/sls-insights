@@ -242,7 +242,7 @@ with job_tab:
             xaxis_fixedrange=True, yaxis_fixedrange=True,
             margin=dict(t=40,b=10,l=10,r=10)
         )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False}, key="job_top_firms_chart")
 
         detail_cols = ["Job Title","Firm","Practice Areas","City",
                        "Experience Range","Posted Date","Job Status","Firm Prospects Link"]
@@ -262,7 +262,7 @@ with job_tab:
             xaxis_fixedrange=True, yaxis_fixedrange=True,
             margin=dict(t=40,b=10,l=10,r=10)
         )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False}, key="job_top_cities_chart")
         st.dataframe(df[df["City"].isin(s.index)][detail_cols],
                      hide_index=True, use_container_width=True)
 
@@ -284,7 +284,7 @@ with job_tab:
             xaxis_fixedrange=True,yaxis_fixedrange=True,
             margin=dict(t=40,b=10,l=10,r=10)
         )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False}, key="job_practice_areas_chart")
 
         mask = df["Practice Areas"].fillna("").apply(
             lambda cell: any(pa in cell for pa in s.index)
@@ -314,7 +314,7 @@ with job_tab:
                 xaxis_fixedrange=True, yaxis_fixedrange=True,
                 margin=dict(t=40,b=10,l=10,r=10)
             )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False}, key="job_experience_chart")
             st.dataframe(exp_df.sort_values("Min Years")[detail_cols],
                          hide_index=True, use_container_width=True)
 ## --------------------------------------------------------------------------- #
@@ -408,7 +408,7 @@ with atty_tab:
             xaxis_fixedrange=True,yaxis_fixedrange=True,
             margin=dict(t=40,b=10,l=10,r=10)
         )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False}, key="atty_top_firms_chart")
         detail_cols = ["Name","From Firm","To Firm","Practice Areas",
                        "City","Title","Move Date"]
         st.dataframe(df[df["To Firm"].isin(s.index)][detail_cols],
@@ -427,7 +427,7 @@ with atty_tab:
             xaxis_fixedrange=True,yaxis_fixedrange=True,
             margin=dict(t=40,b=10,l=10,r=10)
         )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False}, key="atty_top_cities_chart")
         st.dataframe(df[df["City"].isin(s.index)][detail_cols],
                      hide_index=True, use_container_width=True)
 
@@ -449,7 +449,7 @@ with atty_tab:
             xaxis_fixedrange=True,yaxis_fixedrange=True,
             margin=dict(t=40,b=10,l=10,r=10)
         )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False}, key="atty_practice_areas_chart")
 
         mask = df["Practice Areas"].fillna("").apply(
             lambda cell: any(pa in cell for pa in s.index)
@@ -479,7 +479,7 @@ with atty_tab:
                 xaxis_fixedrange=True,yaxis_fixedrange=True,
                 margin=dict(t=40,b=10,l=10,r=10)
             )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False}, key="atty_experience_chart")
             exp_cols = ["Name","From Firm","To Firm","Practice Areas","City",
                         "Title","Graduation Year","Years Since JD","Bracket","Move Date"]
             st.dataframe(exp[exp_cols].sort_values("Years Since JD"),
