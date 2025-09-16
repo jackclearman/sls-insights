@@ -37,9 +37,10 @@ def load_amlaw_data():
         return pd.DataFrame(columns=["AmLaw Rank", "FP ID - Firm"])
 
 @st.cache_data(ttl=24*3600)
-def fetch_jobs_from_api(days_range=30, start_date=None, end_date=None):
+def fetch_jobs_from_api(days_range=30, start_date=None, end_date=None, job_type=None):
     key = get_api_key()
     if not key:
+        st.error("API token missing. Check .streamlit/secrets.toml or environment variable.")
         return []
     headers = {"X-AUTH-TOKEN": key, "Content-Type": "application/json"}
     if start_date is not None and end_date is not None:
@@ -59,12 +60,24 @@ def fetch_jobs_from_api(days_range=30, start_date=None, end_date=None):
         }
 
     jobs_by_id = {}
-    for role in ("Associate", "Partner"):
+    import json
+    # Only fetch jobs for the selected job type
+    role = job_type if job_type in ("Associate", "Partner") else "Associate"
+    req_body = payload(role)
+    try:
         r = requests.post(JOBS_API_ENDPOINT, headers=headers,
-                          json=payload(role), params=params)
+                          json=req_body, params=params)
         r.raise_for_status()
-        for rec in r.json().get("data", []):
+        try:
+            data = r.json().get("data", [])
+        except json.decoder.JSONDecodeError:
+            st.error(f"API response is not valid JSON.\nRaw response:\n{r.text}\n\nRequest body:\n{req_body}")
+            return []
+        for rec in data:
             jobs_by_id[rec["id"]] = rec
+    except Exception as e:
+        st.error(f"API request failed: {e}\nRaw response:\n{getattr(r, 'text', '')}\n\nRequest body:\n{req_body}")
+        return []
     return list(jobs_by_id.values())
 
 @st.cache_data(ttl=24*3600)
@@ -167,10 +180,14 @@ with job_tab:
 
     job_type = st.radio("Select Job Type", ["Associates", "Partners"], horizontal=True)
 
+    # Map job_type radio to API role
+    api_role = "Associate" if job_type == "Associates" else "Partner"
     if ("job_raw" not in st.session_state or
-        st.session_state.get("jobs_fetch_days") != period_days):
-        st.session_state["job_raw"]        = fetch_jobs_from_api(period_days)
+        st.session_state.get("jobs_fetch_days") != period_days or
+        st.session_state.get("jobs_fetch_type") != api_role):
+        st.session_state["job_raw"]        = fetch_jobs_from_api(days_range=period_days, job_type=api_role)
         st.session_state["jobs_fetch_days"] = period_days
+        st.session_state["jobs_fetch_type"] = api_role
         st.text(f"{len(st.session_state['job_raw']):,} jobs fetched from API.")
 
     job_df = (pd.DataFrame([extract_job(j) for j in st.session_state["job_raw"]])
@@ -184,11 +201,9 @@ with job_tab:
         mapping = dict(zip(amlaw_df["FP ID - Firm"], amlaw_df["AmLaw Rank"]))
         job_df["Am Law Ranking"] = job_df["Firm ID"].map(mapping).astype("Int64")
 
-    # associate/partner filter
-    if job_type == "Associates":
-        job_df = job_df[job_df["Job Type"].str.contains("Associate", na=False, case=False)]
-    else:
-        job_df = job_df[job_df["Job Type"].str.contains("Partner",   na=False, case=False)]
+    if job_df.empty:
+        st.warning("No jobs found for the selected type and period.")
+        st.stop()
 
     # top-level filters
     col1,col2,col3,col4 = st.columns(4)
