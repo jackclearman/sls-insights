@@ -617,8 +617,11 @@ with report_tab:
                 lines.append(f"    {i}. {city} ({count})")
             lines.append("")
         grad_years = atty_df["Graduation Year"].dropna()
-        grad_years_rounded = grad_years.astype(float).round(0).astype(int).astype(str)
-        top_years = grad_years_rounded.value_counts().head(5)
+        grad_years_rounded = grad_years.astype(float).round(0).astype(int)
+        # Exclude the current year (2025) from analysis
+        grad_years_filtered = grad_years_rounded[grad_years_rounded != 2025]
+        grad_years_str = grad_years_filtered.astype(str)
+        top_years = grad_years_str.value_counts().head(5)
         lines.append("  Top 5 JD Year:")
         for i, (year, count) in enumerate(top_years.items(), 1):
             lines.append(f"    {i}. {year} ({count} placements)")
