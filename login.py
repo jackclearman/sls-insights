@@ -41,7 +41,12 @@ def exchange_code_for_token(code):
         st.error(f"Salesforce token exchange failed: {e}\nResponse: {response.text}")
         print(f"Salesforce token exchange failed: {e}\nResponse: {response.text}")
         return None
-    return response.json()
+    try:
+        return response.json()
+    except ValueError:
+        st.error(f"Salesforce token exchange returned non-JSON response:\n{response.text}")
+        print(f"Salesforce token exchange returned non-JSON response:\n{response.text}")
+        return None
 
 def login_form():
     query_params = st.query_params
@@ -62,14 +67,20 @@ def login_form():
                 try:
                     resp = requests.get(id_url, headers={"Authorization": f"Bearer {access_token}"})
                     resp.raise_for_status()
-                    userinfo = resp.json()
+                    try:
+                        userinfo = resp.json()
+                    except ValueError:
+                        st.warning("Salesforce identity endpoint returned non-JSON response.")
+                        userinfo = {}
                     # common fields: email, preferred_username
                     user_email = userinfo.get("email") or userinfo.get("preferred_username")
                     if user_email:
                         st.session_state["user_email"] = user_email
                         st.session_state["salesforce_user"] = userinfo
-                except Exception as e:
+                except requests.exceptions.HTTPError as e:
                     # Non-fatal: we still have a token, but user_email won't be present until later
+                    st.warning(f"Could not fetch Salesforce user info: {e}\nResponse: {getattr(resp, 'text', '')}")
+                except Exception as e:
                     st.warning(f"Could not fetch Salesforce user info: {e}")
             st.session_state["last_oauth_code"] = code
             st.success("Logged in with Salesforce!")
