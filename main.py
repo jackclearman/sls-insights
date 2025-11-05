@@ -1,10 +1,10 @@
 import streamlit as st
-from .login import login_form, logout_button
-from .sf_queries import get_candidate_by_token
-from .dashboard_candidate import dashboard_candidate
-from .dashboard_recruiter import dashboard_recruiter
+from login import login_form, logout_button
+from sf_queries import get_candidate_by_token
+from dashboard_candidate import dashboard_candidate
+from dashboard_recruiter import dashboard_recruiter
 # Email tracking dashboard (new)
-from .dashboard_email_tracking import render_email_tracking
+from dashboard_email_tracking import render_email_tracking
 
 def main():
     # Ensure `st.set_page_config()` is the first Streamlit command in the script.
