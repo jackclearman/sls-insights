@@ -1,6 +1,32 @@
+# --- Core Framework ---
 streamlit
+streamlit-authenticator==0.2.2
+extra-streamlit-components==0.1.81
+
+# --- Data Handling & Analysis ---
 pandas
+numpy
+pyarrow
+psycopg2-binary==2.9.9
+requests
+urllib3
+python-dateutil
+pytz
+tzdata
+
+# --- Visualization ---
 matplotlib
 seaborn
 plotly
-streamlit-authenticator==0.2.2
+
+# --- Utility & System ---
+jinja2
+pyyaml
+toml
+typing-extensions
+
+# --- Optional Enhancements ---
+rich
+markdown-it-py
+mdurl
+pygments
