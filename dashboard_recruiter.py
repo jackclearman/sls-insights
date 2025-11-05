@@ -1,6 +1,6 @@
 import streamlit as st
-from .dashboard_insights import dashboard_insights
-from .sf_queries import get_candidates_for_recruiter, get_opportunities_for_candidate, generate_candidate_password
+from dashboard_insights import dashboard_insights
+from streamlit_app.sf_queries import get_candidates_for_recruiter, get_opportunities_for_candidate, generate_candidate_password
 import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
@@ -174,7 +174,7 @@ def monthly_report_dashboard():
     """Monthly Report Dashboard - Last 30 Days Summary"""
     
     # Import necessary functions from dashboard_insights
-    from .dashboard_insights import (
+    from dashboard_insights import (
         fetch_jobs_from_api, fetch_attorneys_from_api, 
         extract_job, extract_attorney, load_amlaw_data
     )
