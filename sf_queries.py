@@ -1,7 +1,7 @@
 import requests
 import string
 import random
-from .sf_auth import authenticate_salesforce
+from sf_auth import authenticate_salesforce
 
 def generate_candidate_password(candidate_name):
     """Generate password: first 4 characters of last name + 5 deterministic characters/symbols"""
@@ -40,7 +40,12 @@ def salesforce_query(soql):
     except requests.exceptions.HTTPError as e:
         print(f"[DEBUG] Salesforce query failed: {e}\nURL: {url}\nSOQL: {soql}\nResponse: {resp.text}")
         raise
-    return resp.json()["records"]
+    try:
+        return resp.json()["records"]
+    except ValueError:
+        # JSON decode failed — log and raise a clearer error
+        print(f"[DEBUG] Failed to parse JSON from Salesforce response. Status: {resp.status_code}\nResponse text: {resp.text}")
+        raise
 
 def get_engaged_candidates():
     soql = (
