@@ -52,8 +52,17 @@ def fetch_jobs_from_api(days_range=30):
     for role in ("Associate", "Partner"):
         r = requests.post(JOBS_API_ENDPOINT, headers=headers,
                           json=payload(role), params=params)
-        r.raise_for_status()
-        for rec in r.json().get("data", []):
+        try:
+            r.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            st.error(f"Jobs API request failed: {e}\nResponse:\n{getattr(r, 'text', '')}")
+            continue
+        try:
+            data = r.json().get("data", [])
+        except ValueError:
+            st.error(f"Jobs API returned non-JSON response:\n{r.text}")
+            continue
+        for rec in data:
             jobs_by_id[rec["id"]] = rec
     return list(jobs_by_id.values())
 
@@ -80,8 +89,17 @@ def fetch_jobs_from_api_custom_dates(start_date, end_date):
     for role in ("Associate", "Partner"):
         r = requests.post(JOBS_API_ENDPOINT, headers=headers,
                           json=payload(role), params=params)
-        r.raise_for_status()
-        for rec in r.json().get("data", []):
+        try:
+            r.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            st.error(f"Jobs API request failed: {e}\nResponse:\n{getattr(r, 'text', '')}")
+            continue
+        try:
+            data = r.json().get("data", [])
+        except ValueError:
+            st.error(f"Jobs API returned non-JSON response:\n{r.text}")
+            continue
+        for rec in data:
             jobs_by_id[rec["id"]] = rec
     return list(jobs_by_id.values())
 
@@ -103,8 +121,16 @@ def fetch_attorneys_from_api(attorney_type="associates", days_range=90):
     }
     r = requests.post(ATTORNEYS_API_ENDPOINT, headers=headers,
                       json=payload, params=params)
-    r.raise_for_status()
-    return r.json().get("data", [])
+    try:
+        r.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Attorneys API request failed: {e}\nResponse:\n{getattr(r, 'text', '')}")
+        return []
+    try:
+        return r.json().get("data", [])
+    except ValueError:
+        st.error(f"Attorneys API returned non-JSON response:\n{r.text}")
+        return []
 
 @st.cache_data(ttl=24*3600)
 def fetch_attorneys_from_api_custom_dates(start_date, end_date, attorney_type="associates"):
@@ -125,8 +151,16 @@ def fetch_attorneys_from_api_custom_dates(start_date, end_date, attorney_type="a
     }
     r = requests.post(ATTORNEYS_API_ENDPOINT, headers=headers,
                       json=payload, params=params)
-    r.raise_for_status()
-    return r.json().get("data", [])
+    try:
+        r.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Attorneys API request failed: {e}\nResponse:\n{getattr(r, 'text', '')}")
+        return []
+    try:
+        return r.json().get("data", [])
+    except ValueError:
+        st.error(f"Attorneys API returned non-JSON response:\n{r.text}")
+        return []
 
 def extract_job(j):
     region = city = None
