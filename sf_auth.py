@@ -18,6 +18,15 @@ def authenticate_salesforce():
         "password": password + security_token,
     }
     resp = requests.post(auth_url, data=data)
-    resp.raise_for_status()
-    result = resp.json()
-    return result["access_token"], result["instance_url"]
+    try:
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        # Log response for debugging
+        print(f"[DEBUG] Salesforce auth failed: {e}\nURL: {auth_url}\nResponse: {resp.text}")
+        raise
+    try:
+        result = resp.json()
+    except ValueError:
+        print(f"[DEBUG] Salesforce auth returned non-JSON response:\n{resp.text}")
+        raise
+    return result.get("access_token"), result.get("instance_url")
