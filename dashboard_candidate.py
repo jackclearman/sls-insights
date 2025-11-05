@@ -1,5 +1,5 @@
 import streamlit as st
-from .sf_queries import get_opportunities_for_candidate, generate_candidate_password
+from streamlit_app.sf_queries import get_opportunities_for_candidate, generate_candidate_password
 
 def dashboard_candidate(candidate_record):
     st.header(f"Welcome, {candidate_record['Name']}")
