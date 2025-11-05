@@ -1,6 +1,6 @@
 import streamlit as st
 from login import login_form, logout_button
-from streamlit_app.sf_queries import get_candidate_by_token
+from sf_queries import get_candidate_by_token
 from dashboard_candidate import dashboard_candidate
 from dashboard_recruiter import dashboard_recruiter
 # Email tracking dashboard (new)
