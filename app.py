@@ -9,6 +9,22 @@ from dashboard_email_tracking import render_email_tracking
 def main():
     # Ensure `st.set_page_config()` is the first Streamlit command in the script.
     st.set_page_config(page_title="SLS Portal", layout="wide")
+    # Validate required secrets and show clear message in UI if missing
+    missing = []
+    try:
+        if "SALESFORCE" not in st.secrets:
+            missing.append("SALESFORCE")
+    except Exception:
+        missing.append("SALESFORCE")
+    try:
+        if "API_CREDENTIALS" not in st.secrets:
+            # optional for some flows, but warn
+            missing.append("API_CREDENTIALS")
+    except Exception:
+        missing.append("API_CREDENTIALS")
+    if missing:
+        st.error(f"Missing required secrets: {', '.join(missing)}. If running locally, create .streamlit/secrets.toml; if deployed, add them in Streamlit Cloud Secrets.")
+        # Continue so developer can still see UI, but many features will be disabled
     
     # Check for candidate token first
     token = st.query_params.get("token")
