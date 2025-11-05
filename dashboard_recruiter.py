@@ -1,6 +1,6 @@
 import streamlit as st
 from dashboard_insights import dashboard_insights
-from streamlit_app.sf_queries import get_candidates_for_recruiter, get_opportunities_for_candidate, generate_candidate_password
+from sf_queries import get_candidates_for_recruiter, get_opportunities_for_candidate, generate_candidate_password
 import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
