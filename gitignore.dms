@@ -1,0 +1,19 @@
+(# Byte-compiled / cache files)
+__pycache__/
+*.py[cod]
+
+(# C extensions)
+*.so
+
+(# Distribution / packaging)
+build/
+dist/
+*.egg-info/
+
+(# Editor directories and files)
+.vscode/
+*.swp
+
+(# Streamlit secrets - do NOT commit secrets.toml)
+.streamlit/secrets.toml
+
