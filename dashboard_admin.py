@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_app.sf_queries import get_engaged_candidates
+from sf_queries import get_engaged_candidates
 
 def dashboard_admin():
     st.header("Recruiter Dashboard")
