@@ -84,10 +84,10 @@ def fetch_templates(recruiter_email: str, admin: bool) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=300)
-def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date: datetime, template_id: Optional[int] = None) -> dict:
+def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date: datetime, template_id: Optional[str] = None) -> dict:
     """Fetch KPI metrics: total_sent, total_opens, total_replies.
 
-    Uses `email_sends.sent_timestamp`, `open_count`, and `replied` fields.
+    Uses `email_sends.sent_timestamp` and `delivery_status` fields.
     """
     where_clause, base_params = _admin_where_clause(admin, recruiter_email)
     params = base_params[:]  # copy
@@ -111,8 +111,8 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
     sql = f"""
     SELECT
       COUNT(*) AS total_sent,
-      COALESCE(SUM(e.open_count),0) AS total_opens,
-      COUNT(*) FILTER (WHERE e.replied = TRUE) AS total_replies
+      COUNT(*) FILTER (WHERE e.delivery_status IN ('Open', 'Replied')) AS total_opens,
+      COUNT(*) FILTER (WHERE e.delivery_status = 'Replied') AS total_replies
     FROM email_sends e
     {where_sql}
     """
@@ -142,8 +142,8 @@ def fetch_top_templates(recruiter_email: str, admin: bool, start_date: datetime,
     sql = f"""
     SELECT e.sf_template_id AS template_id, COALESCE(e.sf_template_name, '(None)') AS template_name,
       COUNT(*) AS sent_count,
-      SUM(CASE WHEN COALESCE(e.open_count,0) > 0 THEN 1 ELSE 0 END) AS opens,
-      (SUM(CASE WHEN COALESCE(e.open_count,0) > 0 THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*),0)) AS open_rate
+      COUNT(*) FILTER (WHERE e.delivery_status IN ('Open', 'Replied')) AS opens,
+      (COUNT(*) FILTER (WHERE e.delivery_status IN ('Open', 'Replied'))::float / NULLIF(COUNT(*),0)) AS open_rate
     FROM email_sends e
     {where_sql}
     GROUP BY e.sf_template_id, e.sf_template_name
@@ -162,7 +162,7 @@ def fetch_top_templates(recruiter_email: str, admin: bool, start_date: datetime,
 
 @st.cache_data(ttl=300)
 def fetch_emails_paginated(recruiter_email: str, admin: bool, start_date: datetime, end_date: datetime,
-                           template_id: Optional[int], limit: int, offset: int) -> Tuple[pd.DataFrame, int]:
+                           template_id: Optional[str], limit: int, offset: int) -> Tuple[pd.DataFrame, int]:
     """Return paginated email rows and total count.
 
     Expected columns returned: sent_at, recipient_name, recipient_jd_year, contact_id, account_id,
@@ -199,8 +199,8 @@ def fetch_emails_paginated(recruiter_email: str, admin: bool, start_date: dateti
            le.sf_account_id AS account_id,
            e.subject AS subject,
            COALESCE(e.sf_template_name, '(None)') AS template_name,
-           CASE WHEN COALESCE(e.open_count,0) > 0 THEN TRUE ELSE FALSE END AS opened,
-           e.replied AS replied,
+           CASE WHEN e.delivery_status IN ('Open', 'Replied') THEN TRUE ELSE FALSE END AS opened,
+           CASE WHEN e.delivery_status = 'Replied' THEN TRUE ELSE FALSE END AS replied,
            COALESCE(e.recipient_email, '') AS recipient_email
     FROM email_sends e
     LEFT JOIN latest_events le ON le.email_id = e.email_id
@@ -228,18 +228,19 @@ def fetch_emails_paginated(recruiter_email: str, admin: bool, start_date: dateti
 
 @st.cache_data(ttl=300)
 def fetch_performance_by_job(recruiter_email: str, admin: bool, start_date: datetime, end_date: datetime,
-                                                         template_id: Optional[int] = None, limit: int = 100) -> pd.DataFrame:
+                                                         template_id: Optional[str] = None, limit: int = 100) -> pd.DataFrame:
         """Aggregate performance metrics per job.
 
         Returns: DataFrame with columns:
             job_id, job_name, template_name, last_sent_at, sent_count,
             open_rate, reply_rate, best_open_jd, best_open_rate, best_reply_jd, best_reply_rate
         """
-        where_clause, params = _admin_where_clause(admin, recruiter_email)
+        where_clause, base_params = _admin_where_clause(admin, recruiter_email)
         template_filter = ""
-        if template_id:
+        template_params = []
+        if template_id is not None:
                 template_filter = " AND e.sf_template_id = %s"
-                params = params + [template_id]
+                template_params = [template_id]
 
         # Build WHERE with dates
         if where_clause:
@@ -253,10 +254,10 @@ def fetch_performance_by_job(recruiter_email: str, admin: bool, start_date: date
                 e.sf_job_id AS job_id,
                 COALESCE(e.sf_job_name, '(Unspecified)') AS job_name,
                 COUNT(*) AS sent_count,
-                SUM(CASE WHEN COALESCE(e.open_count,0) > 0 THEN 1 ELSE 0 END) AS opens,
-                SUM(CASE WHEN e.replied = TRUE THEN 1 ELSE 0 END) AS replies,
-                (SUM(CASE WHEN COALESCE(e.open_count,0) > 0 THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*),0)) AS open_rate,
-                (SUM(CASE WHEN e.replied = TRUE THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*),0)) AS reply_rate,
+                COUNT(*) FILTER (WHERE e.delivery_status IN ('Open', 'Replied')) AS opens,
+                COUNT(*) FILTER (WHERE e.delivery_status = 'Replied') AS replies,
+                (COUNT(*) FILTER (WHERE e.delivery_status IN ('Open', 'Replied'))::float / NULLIF(COUNT(*),0)) AS open_rate,
+                (COUNT(*) FILTER (WHERE e.delivery_status = 'Replied')::float / NULLIF(COUNT(*),0)) AS reply_rate,
                 MAX(e.sent_timestamp) AS last_sent_at
             FROM email_sends e
             {where_sql}
@@ -268,10 +269,10 @@ def fetch_performance_by_job(recruiter_email: str, admin: bool, start_date: date
                 e.sf_job_id AS job_id,
                 e.recipient_jd_year AS jd_year,
                 COUNT(*) AS sent,
-                SUM(CASE WHEN COALESCE(e.open_count,0) > 0 THEN 1 ELSE 0 END) AS opens,
-                SUM(CASE WHEN e.replied = TRUE THEN 1 ELSE 0 END) AS replies,
-                (SUM(CASE WHEN COALESCE(e.open_count,0) > 0 THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*),0)) AS open_rate,
-                (SUM(CASE WHEN e.replied = TRUE THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*),0)) AS reply_rate
+                COUNT(*) FILTER (WHERE e.delivery_status IN ('Open', 'Replied')) AS opens,
+                COUNT(*) FILTER (WHERE e.delivery_status = 'Replied') AS replies,
+                (COUNT(*) FILTER (WHERE e.delivery_status IN ('Open', 'Replied'))::float / NULLIF(COUNT(*),0)) AS open_rate,
+                (COUNT(*) FILTER (WHERE e.delivery_status = 'Replied')::float / NULLIF(COUNT(*),0)) AS reply_rate
             FROM email_sends e
             {where_sql}
             {template_filter}
@@ -314,14 +315,21 @@ def fetch_performance_by_job(recruiter_email: str, admin: bool, start_date: date
         """
 
         # The SQL uses the same {where_sql} fragment three times (per_job, per_job_jd, pj subquery).
-        # We must repeat the WHERE params + start/end pairs for each occurrence.
-        base_params = params[:]  # params contains recruiter and optional template id
-        query_params = (
-            base_params + [start_date, end_date]
-            + base_params + [start_date, end_date]
-            + base_params + [start_date, end_date]
-            + [limit]
-        )
+        # Each occurrence needs: base_params (recruiter if not admin) + [start_date, end_date] + template_params (if template selected)
+        
+        # Ensure dates are in proper format for PostgreSQL
+        # psycopg2 should handle datetime objects, but let's be explicit for debugging
+        # Ensure consistent parameter order for each reuse of {where_sql}
+        def build_where_params():
+            params = base_params + [start_date, end_date]
+            if template_params:
+                params += template_params  # only append if template_id is actually used
+            return params
+
+        # Apply for each of the 3 {where_sql} uses, then add LIMIT
+        query_params = build_where_params() + build_where_params() + build_where_params() + [limit]
+
+        
         with get_db_conn() as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                         cur.execute(sql, query_params)
@@ -330,11 +338,11 @@ def fetch_performance_by_job(recruiter_email: str, admin: bool, start_date: date
 
 
 def build_salesforce_link(contact_id: Optional[str], account_id: Optional[str]) -> str:
-    base = os.environ.get("SALESFORCE_BASE_URL", "https://yourinstance.my.salesforce.com")
+    base = os.environ.get("SALESFORCE_BASE_URL", "https://momentum-site-8441.lightning.force.com/")
     if contact_id:
-        return f"{base}/{contact_id}"
+        return f"{base}/{contact_id}/view"
     if account_id:
-        return f"{base}/{account_id}"
+        return f"{base}/{account_id}/view"
     return ""
 
 
