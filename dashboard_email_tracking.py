@@ -101,8 +101,8 @@ def fetch_emails_paginated(
         )
         SELECT e.sent_timestamp AS sent_at,
                e.delivery_status AS delivery_status,
-               NULL::text AS contact_name,
-               NULL::int AS recipient_jd_year,
+               NULL::text AS e.contact_name,
+               NULL::int AS e.recipient_jd_year,
                e.sf_email_recipient_id AS contact_id,
                le.sf_account_id AS account_id,
                e.subject AS subject,
