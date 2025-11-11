@@ -219,18 +219,21 @@ def fetch_top_templates(recruiter_email: str, admin: bool, start_date: datetime,
     sql = f"""
     SELECT 
         e.sf_template_id AS template_id,
-        COALESCE(e.sf_template_name, '(None)') AS template_name,
+        e.sf_template_name AS template_name,
         COUNT(*) AS sent_count,
         COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%') AS opens,
         (COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%')::float
          / NULLIF(COUNT(*), 0)) AS open_rate
     FROM email_sends e
     {where_sql}
+    AND e.sf_template_name IS NOT NULL
+    AND e.sf_job_name IS NOT NULL
     GROUP BY e.sf_template_id, e.sf_template_name
     HAVING COUNT(*) > 0
     ORDER BY open_rate DESC NULLS LAST, opens DESC
     LIMIT %s
     """
+
 
     query_params = params + [start_date, end_date, top_n]
     with get_db_conn() as conn:
