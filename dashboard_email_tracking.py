@@ -95,32 +95,35 @@ def fetch_emails_paginated(
 
     data_sql = f"""
         WITH latest_events AS (
-            SELECT DISTINCT ON (email_id) email_id, sf_account_id
+            SELECT DISTINCT ON (email_id)
+                email_id,
+                sf_account_id,
+                event_type
             FROM email_tracking_events
             ORDER BY email_id, event_timestamp DESC
         )
-        SELECT e.sent_timestamp AS sent_at,
-               e.delivery_status AS delivery_status,
-               NULL::text AS recipient_name,
-               NULL::int AS recipient_jd_year,
-               e.sf_email_recipient_id AS contact_id,
-               le.sf_account_id AS account_id,
-               e.subject AS subject,
-               COALESCE(e.sf_template_name, '(None)') AS template_name,
-               CASE WHEN e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%' THEN TRUE ELSE FALSE END AS opened,
-               CASE WHEN e.delivery_status ILIKE 'replied%%' THEN TRUE ELSE FALSE END AS replied,
-
-               COALESCE(e.recipient_email, '') AS recipient_email,
-               e.body_html AS body_html,
-               e.body_text AS body_text
-
-
+        SELECT
+            e.sent_timestamp AS sent_at,
+            e.delivery_status AS delivery_status,
+            NULL::text AS recipient_name,
+            NULL::int AS recipient_jd_year,
+            e.sf_email_recipient_id AS contact_id,
+            le.sf_account_id AS account_id,
+            e.subject AS subject,
+            COALESCE(e.sf_template_name, '(None)') AS template_name,
+            -- ✅ use event_type to derive open/reply flags
+            (le.event_type ILIKE 'open%' OR le.event_type ILIKE 'click%' OR le.event_type ILIKE 'reply%') AS opened,
+            (le.event_type ILIKE 'reply%') AS replied,
+            COALESCE(e.recipient_email, '') AS recipient_email,
+            e.body_html AS body_html,
+            e.body_text AS body_text
         FROM email_sends e
         LEFT JOIN latest_events le ON le.email_id = e.email_id
         {where_sql}
         {template_filter}
         ORDER BY e.sent_timestamp DESC
         LIMIT %s OFFSET %s
+
     """
     data_params = base_params + [start_date, end_date] + template_params + [limit, offset]
 
