@@ -101,7 +101,7 @@ def fetch_emails_paginated(
         )
         SELECT e.sent_timestamp AS sent_at,
                e.delivery_status AS delivery_status,
-               NULL::text AS recipient_name,
+               NULL::text AS contact_name,,
                NULL::int AS recipient_jd_year,
                e.sf_email_recipient_id AS contact_id,
                le.sf_account_id AS account_id,
@@ -396,9 +396,9 @@ def render_email_tracking():
         display = df_page.copy()
         display["sent_at"] = pd.to_datetime(display["sent_at"]) if not display["sent_at"].empty else display["sent_at"]
         display["Recipient"] = display.apply(
-            lambda r: f"{r.get('recipient_name','')} (JD {int(r['recipient_jd_year'])})"
+            lambda r: f"{r.get('contact_name,','')} (JD {int(r['recipient_jd_year'])})"
             if pd.notna(r.get('recipient_jd_year'))
-            else r.get('recipient_name',''),
+            else r.get('contact_name,',''),
             axis=1
         )
         display["SF Link"] = display.apply(sf_link, axis=1)
