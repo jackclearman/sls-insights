@@ -432,7 +432,7 @@ def render_email_tracking():
                 status_label = "opened"
 
             recipient_name = row.get("Recipient") or "(Unknown Recipient)"
-            company_name = row.get("company_name") or "Unknown Firm"
+            company_name = row.get("account_name") or "Unknown Firm"
 
             # Optional Salesforce link for company
             company_link = (
