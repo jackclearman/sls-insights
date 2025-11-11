@@ -425,11 +425,12 @@ def render_email_tracking():
         st.markdown("### 📧 View Email Content")
         for _, row in display.iterrows():
             sent_display = pd.to_datetime(row["Sent Date"]).strftime("%Y-%m-%d %H:%M")
-            status_label = (row["Status"] or "sent").lower()
-            if row["Replied"]:
+            status_label = (row.get("Status") or "sent").lower()
+            if row.get("Replied", False):
                 status_label = "replied"
-            elif row["Opened"]:
+            elif row.get("Opened", False):
                 status_label = "opened"
+
 
             recipient_name = row.get("Recipient") or "(Unknown Recipient)"
             company_name = row.get("company_name") or "Unknown Firm"
