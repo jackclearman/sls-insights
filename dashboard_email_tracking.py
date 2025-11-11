@@ -360,9 +360,11 @@ def render_email_tracking():
         disp = perf_df.copy()
         disp["open_rate"] = (disp["open_rate"] * 100).round(1).astype(str) + "%"
         disp["reply_rate"] = (disp["reply_rate"] * 100).round(1).astype(str) + "%"
-        disp["best_open_rate"] = (disp["best_open_rate"] * 100).round(1).astype(str) + "%"
-        disp["best_reply_rate"] = (disp["best_reply_rate"] * 100).round(1).astype(str) + "%"
-        st.dataframe(disp[["job_name","template_name","last_sent_at","sent_count","open_rate","reply_rate","best_open_jd","best_open_rate","best_reply_jd","best_reply_rate"]], width="stretch")
+        
+        st.dataframe(
+            disp[["job_name", "last_sent_at", "sent_count", "open_rate", "reply_rate"]],
+            width="stretch"
+        )
 
 
     # Top templates
