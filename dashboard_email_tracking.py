@@ -130,11 +130,16 @@ def fetch_emails_paginated(
             cur.execute(count_sql, count_params)
             count_row = cur.fetchone()
             total = count_row[0] if count_row else 0
-
-
+    
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            expected_placeholders = data_sql.count("%s")
+            if len(data_params) != expected_placeholders:
+                st.error(f"Parameter mismatch in email query: expected {expected_placeholders}, got {len(data_params)}")
+                st.stop()
+    
             cur.execute(data_sql, data_params)
             rows = cur.fetchall()
+
 
     df = pd.DataFrame(rows)
     return df, int(total)
