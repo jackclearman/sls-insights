@@ -108,7 +108,10 @@ def fetch_emails_paginated(
                COALESCE(e.sf_template_name, '(None)') AS template_name,
                CASE WHEN e.delivery_status IN ('Open', 'Replied') THEN TRUE ELSE FALSE END AS opened,
                CASE WHEN e.delivery_status = 'Replied' THEN TRUE ELSE FALSE END AS replied,
-               COALESCE(e.recipient_email, '') AS recipient_email
+               COALESCE(e.recipient_email, '') AS recipient_email,
+               e.body_html AS body_html,
+               e.body_text AS body_text
+
         FROM email_sends e
         LEFT JOIN latest_events le ON le.email_id = e.email_id
         {where_sql}
