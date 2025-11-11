@@ -107,8 +107,9 @@ def fetch_emails_paginated(
                le.sf_account_id AS account_id,
                e.subject AS subject,
                COALESCE(e.sf_template_name, '(None)') AS template_name,
-               CASE WHEN e.delivery_status IN ('Open', 'Replied') THEN TRUE ELSE FALSE END AS opened,
-               CASE WHEN e.delivery_status = 'Replied' THEN TRUE ELSE FALSE END AS replied,
+               CASE WHEN e.delivery_status ILIKE 'open%' OR e.delivery_status ILIKE 'replied%' THEN TRUE ELSE FALSE END AS opened,
+               CASE WHEN e.delivery_status ILIKE 'replied%' THEN TRUE ELSE FALSE END AS replied,
+
                COALESCE(e.recipient_email, '') AS recipient_email,
                e.body_html AS body_html,
                e.body_text AS body_text
@@ -478,10 +479,15 @@ def render_email_tracking():
         # Expandable detailed emails
         st.markdown("### 📧 View Email Content")
         for _, row in display.iterrows():
-            header = (
-                f"📨 {row['Subject']} — {row['Recipient Email']}  \n"
-                f"🕒 {row['Sent Date']}  |  **Status:** {row['Status']}  |  "
-                f"**Opened:** {'✅' if row['Opened'] else '❌'}  |  **Replied:** {'✅' if row['Replied'] else '❌'}"
+            sent_display = pd.to_datetime(row["Sent Date"]).strftime("%Y-%m-%d %H:%M")
+            status_label = (row["Status"] or "sent").lower()
+            if row["Replied"]:
+                status_label = "replied"
+            elif row["Opened"]:
+                status_label = "opened"
+            
+            header = f"**{row['Subject']}** — {row['Recipient Email']}  \n{sent_display} | **Email Status:** {status_label}"
+
             )
             with st.expander(header):
                 if row.get("body_html"):
