@@ -279,7 +279,7 @@ def fetch_performance_by_job(
     )
     SELECT *
     FROM per_job
-    ORDER BY sent_count DESC NULLS LAST
+    ORDER BY last_sent_at DESC NULLS LAST
     LIMIT %s
     """
 
