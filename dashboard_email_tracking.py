@@ -100,6 +100,7 @@ def fetch_emails_paginated(
             ORDER BY email_id, event_timestamp DESC
         )
         SELECT e.sent_timestamp AS sent_at,
+               e.delivery_status AS delivery_status,
                NULL::text AS recipient_name,
                NULL::int AS recipient_jd_year,
                e.sf_email_recipient_id AS contact_id,
@@ -111,6 +112,7 @@ def fetch_emails_paginated(
                COALESCE(e.recipient_email, '') AS recipient_email,
                e.body_html AS body_html,
                e.body_text AS body_text
+
 
         FROM email_sends e
         LEFT JOIN latest_events le ON le.email_id = e.email_id
@@ -441,7 +443,6 @@ def render_email_tracking():
     df_page, total = fetch_emails_paginated(user_email, admin_view, start_date, end_date, template_id, limit=page_size, offset=offset)
 
     st.write(f"Showing {min(total, offset+1)}-{min(total, offset+page_size)} of {total:,} emails")
-
     if df_page.empty:
         st.info("No emails found for the selected filters.")
     else:
@@ -464,25 +465,32 @@ def render_email_tracking():
             "opened": "Opened",
             "replied": "Replied",
             "recipient_email": "Recipient Email",
-            "SF Link": "Salesforce Link"
+            "SF Link": "Salesforce Link",
+            "delivery_status": "Status"
         })
     
-        # Compact summary table
+        # Summary table
         st.dataframe(
             display[["Sent Date", "Recipient", "Subject", "Template", "Opened", "Replied", "Recipient Email", "Salesforce Link"]],
             width="stretch"
         )
     
-        # Expandable email content viewer
+        # Expandable detailed emails
         st.markdown("### 📧 View Email Content")
         for _, row in display.iterrows():
-            with st.expander(f"{row['Subject']} — {row['Recipient Email']}"):
+            header = (
+                f"📨 {row['Subject']} — {row['Recipient Email']}  \n"
+                f"🕒 {row['Sent Date']}  |  **Status:** {row['Status']}  |  "
+                f"**Opened:** {'✅' if row['Opened'] else '❌'}  |  **Replied:** {'✅' if row['Replied'] else '❌'}"
+            )
+            with st.expander(header):
                 if row.get("body_html"):
                     st.markdown(row["body_html"], unsafe_allow_html=True)
                 elif row.get("body_text"):
                     st.text(row["body_text"])
                 else:
                     st.info("No email body stored for this message.")
+
     
 
     # Pagination controls
@@ -491,12 +499,12 @@ def render_email_tracking():
         if st.button("Prev"):
             if st.session_state.email_page > 0:
                 st.session_state.email_page -= 1
-                st.experimental_rerun()
+                st.rerun()
     with colp3:
         if st.button("Next"):
             if (offset + page_size) < total:
                 st.session_state.email_page += 1
-                st.experimental_rerun()
+                st.rerun()
 
 
 if __name__ == "__main__":
