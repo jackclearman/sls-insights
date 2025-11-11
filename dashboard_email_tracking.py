@@ -450,9 +450,27 @@ def render_email_tracking():
         display["sent_at"] = pd.to_datetime(display["sent_at"]) if not display["sent_at"].empty else display["sent_at"]
         display["Recipient"] = display.apply(lambda r: f"{r.get('recipient_name','')} (JD {int(r['recipient_jd_year'])})" if pd.notna(r.get('recipient_jd_year')) else r.get('recipient_name',''), axis=1)
         display["SF Link"] = display.apply(sf_link, axis=1)
-        display = display[["sent_at","Recipient","subject","template_name","opened","replied","recipient_email","SF Link"]]
-        display = display.rename(columns={"sent_at":"Sent Date","subject":"Subject","template_name":"Template","opened":"Opened","replied":"Replied","recipient_email":"Recipient Email"})
-        st.dataframe(display, width="stretch")
+        display = display.rename(columns={
+            "sent_at": "Sent Date",
+            "subject": "Subject",
+            "template_name": "Template",
+            "opened": "Opened",
+            "replied": "Replied",
+            "recipient_email": "Recipient Email",
+            "SF Link": "Salesforce Link"
+        })
+        
+        # Convert the Salesforce link to a markdown hyperlink
+        display["Salesforce Link"] = display["Salesforce Link"].apply(
+            lambda x: f"[View in SF]({x})" if x else ""
+        )
+        
+        # Render as markdown table (safe HTML for clickable links)
+        st.markdown(
+            display.to_markdown(index=False),
+            unsafe_allow_html=True
+        )
+
 
     # Pagination controls
     colp1, colp2, colp3 = st.columns([1,6,1])
