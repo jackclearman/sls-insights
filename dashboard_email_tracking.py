@@ -49,14 +49,17 @@ def get_db_conn():
 
 def _admin_where_clause(admin: bool, recruiter_email: str) -> Tuple[str, list]:
     """
-    Return WHERE clause and params.
-    Now: anyone can view company-wide metrics when admin=True.
+    Returns WHERE clause and params for recruiter vs company-wide view.
+    - If admin=False: restricts to that recruiter's emails.
+    - If admin=True: company-wide, but excludes test emails like jack@swanlegal.com.
     """
     if admin:
-        # no recruiter filter → company-wide view
-        return "", []
-    # default: restrict to recruiter's own emails
-    return "WHERE e.recruiter_email = %s", [recruiter_email]
+        # exclude test senders from company-wide data
+        return "WHERE e.recruiter_email NOT IN (%s)", ["jack@swanlegal.com"]
+    else:
+        # normal user-specific filtering
+        return "WHERE e.recruiter_email = %s", [recruiter_email]
+
 
 
 @st.cache_data(ttl=300)
