@@ -487,8 +487,6 @@ def render_email_tracking():
                 status_label = "opened"
             
             header = f"**{row['Subject']}** — {row['Recipient Email']}  \n{sent_display} | **Email Status:** {status_label}"
-
-            )
             with st.expander(header):
                 if row.get("body_html"):
                     st.markdown(row["body_html"], unsafe_allow_html=True)
