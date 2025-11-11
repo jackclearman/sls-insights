@@ -58,70 +58,72 @@ def _admin_where_clause(admin: bool, recruiter_email: str) -> Tuple[str, list]:
 
 
 @st.cache_data(ttl=300)
-def fetch_emails_paginated(recruiter_email: str, admin: bool, start_date: datetime, end_date: datetime,
-                           template_id: Optional[str], limit: int, offset: int) -> Tuple[pd.DataFrame, int]:
+def fetch_emails_paginated(
+    recruiter_email: str,
+    admin: bool,
+    start_date: datetime,
+    end_date: datetime,
+    template_id: Optional[str],
+    limit: int,
+    offset: int,
+) -> Tuple[pd.DataFrame, int]:
     """Return paginated email rows and total count."""
 
     where_clause, base_params = _admin_where_clause(admin, recruiter_email)
 
-    # ✅ Build proper WHERE logic
+    # Proper WHERE clause
     date_filter = "e.sent_timestamp BETWEEN %s AND %s"
     if where_clause:
         where_sql = f"{where_clause} AND {date_filter}"
     else:
         where_sql = f"WHERE {date_filter}"
 
-    # --- Template filter (comes AFTER date params) ---
     template_filter = ""
     template_params = []
     if template_id:
         template_filter = " AND e.sf_template_id = %s"
         template_params = [template_id]
 
-    # --- Count query ---
+    # ✅ Correct param order: recruiter_email → start_date → end_date → template_id
     count_sql = f"""
-    SELECT COUNT(*)
-    FROM email_sends e
-    {where_sql}
-    {template_filter}
+        SELECT COUNT(*)
+        FROM email_sends e
+        {where_sql}
+        {template_filter}
     """
-
-    # ✅ correct param order: recruiter_email → start_date → end_date → template_id
     count_params = base_params + [start_date, end_date] + template_params
 
-    # --- Data query ---
     data_sql = f"""
-    WITH latest_events AS (
-      SELECT DISTINCT ON (email_id) email_id, sf_account_id
-      FROM email_tracking_events
-      ORDER BY email_id, event_timestamp DESC
-    )
-    SELECT e.sent_timestamp AS sent_at,
-           NULL::text AS recipient_name,
-           NULL::int AS recipient_jd_year,
-           e.sf_email_recipient_id AS contact_id,
-           le.sf_account_id AS account_id,
-           e.subject AS subject,
-           COALESCE(e.sf_template_name, '(None)') AS template_name,
-           CASE WHEN e.delivery_status IN ('Open', 'Replied') THEN TRUE ELSE FALSE END AS opened,
-           CASE WHEN e.delivery_status = 'Replied' THEN TRUE ELSE FALSE END AS replied,
-           COALESCE(e.recipient_email, '') AS recipient_email
-    FROM email_sends e
-    LEFT JOIN latest_events le ON le.email_id = e.email_id
-    {where_sql}
-    {template_filter}
-    ORDER BY e.sent_timestamp DESC
-    LIMIT %s OFFSET %s
+        WITH latest_events AS (
+            SELECT DISTINCT ON (email_id) email_id, sf_account_id
+            FROM email_tracking_events
+            ORDER BY email_id, event_timestamp DESC
+        )
+        SELECT e.sent_timestamp AS sent_at,
+               NULL::text AS recipient_name,
+               NULL::int AS recipient_jd_year,
+               e.sf_email_recipient_id AS contact_id,
+               le.sf_account_id AS account_id,
+               e.subject AS subject,
+               COALESCE(e.sf_template_name, '(None)') AS template_name,
+               CASE WHEN e.delivery_status IN ('Open', 'Replied') THEN TRUE ELSE FALSE END AS opened,
+               CASE WHEN e.delivery_status = 'Replied' THEN TRUE ELSE FALSE END AS replied,
+               COALESCE(e.recipient_email, '') AS recipient_email
+        FROM email_sends e
+        LEFT JOIN latest_events le ON le.email_id = e.email_id
+        {where_sql}
+        {template_filter}
+        ORDER BY e.sent_timestamp DESC
+        LIMIT %s OFFSET %s
     """
-
-    # ✅ same param order here
     data_params = base_params + [start_date, end_date] + template_params + [limit, offset]
 
-    # --- Execute ---
+    # --- Execute queries safely
     with get_db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(count_sql, count_params)
             total = cur.fetchone()[0]
+
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(data_sql, data_params)
             rows = cur.fetchall()
