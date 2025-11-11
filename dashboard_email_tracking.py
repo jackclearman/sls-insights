@@ -450,49 +450,9 @@ def render_email_tracking():
         display["sent_at"] = pd.to_datetime(display["sent_at"]) if not display["sent_at"].empty else display["sent_at"]
         display["Recipient"] = display.apply(lambda r: f"{r.get('recipient_name','')} (JD {int(r['recipient_jd_year'])})" if pd.notna(r.get('recipient_jd_year')) else r.get('recipient_name',''), axis=1)
         display["SF Link"] = display.apply(sf_link, axis=1)
-        display = display.rename(columns={
-            "sent_at": "Sent Date",
-            "subject": "Subject",
-            "template_name": "Template",
-            "opened": "Opened",
-            "replied": "Replied",
-            "recipient_email": "Recipient Email",
-            "SF Link": "Salesforce Link"
-        })
-        
-        # Convert the Salesforce link to a markdown hyperlink
-        # Convert Salesforce URLs into clickable “View in SF” links
-        display["Salesforce Link"] = display["Salesforce Link"].apply(
-            lambda x: x if x else ""
-        )
-        
-        # Reorder and clean columns
-        display = display[
-            [
-                "Sent Date",
-                "Recipient",
-                "Subject",
-                "Template",
-                "Opened",
-                "Replied",
-                "Recipient Email",
-                "Salesforce Link",
-            ]
-        ]
-        
-        # Streamlit interactive data editor (matches other tables)
-        st.data_editor(
-            display,
-            column_config={
-                "Salesforce Link": st.column_config.LinkColumn(
-                    "Salesforce Link", display_text="View in SF"
-                ),
-            },
-            hide_index=True,
-            use_container_width=True,
-        )
-
-
+        display = display[["sent_at","Recipient","subject","template_name","opened","replied","recipient_email","SF Link"]]
+        display = display.rename(columns={"sent_at":"Sent Date","subject":"Subject","template_name":"Template","opened":"Opened","replied":"Replied","recipient_email":"Recipient Email"})
+        st.dataframe(display, width="stretch")
 
     # Pagination controls
     colp1, colp2, colp3 = st.columns([1,6,1])
