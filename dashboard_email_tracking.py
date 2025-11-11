@@ -163,29 +163,31 @@ def fetch_top_templates(recruiter_email: str, admin: bool, start_date: datetime,
 @st.cache_data(ttl=300)
 def fetch_emails_paginated(recruiter_email: str, admin: bool, start_date: datetime, end_date: datetime,
                            template_id: Optional[str], limit: int, offset: int) -> Tuple[pd.DataFrame, int]:
-    """Return paginated email rows and total count.
+    """Return paginated email rows and total count."""
 
-    Expected columns returned: sent_at, recipient_name, recipient_jd_year, contact_id, account_id,
-    subject, template_name, opened, replied, recipient_email
-    """
     where_clause, params = _admin_where_clause(admin, recruiter_email)
     template_filter = ""
     if template_id:
         template_filter = " AND e.sf_template_id = %s"
         params = params + [template_id]
 
-    # Count total
-    # Count total using email_sends
+    # ✅ Correct WHERE logic
+    date_filter = "e.sent_timestamp BETWEEN %s AND %s"
+    if where_clause:
+        where_sql = f"{where_clause} AND {date_filter}"
+    else:
+        where_sql = f"WHERE {date_filter}"
+
+    # --- Count query ---
     count_sql = f"""
     SELECT COUNT(*)
     FROM email_sends e
-    {where_clause}
-    AND e.sent_timestamp BETWEEN %s AND %s
+    {where_sql}
     {template_filter}
     """
     count_params = params + [start_date, end_date]
 
-    # Data query: use email_sends and pull latest account_id from email_tracking_events if available
+    # --- Data query ---
     data_sql = f"""
     WITH latest_events AS (
       SELECT DISTINCT ON (email_id) email_id, sf_account_id
@@ -204,16 +206,14 @@ def fetch_emails_paginated(recruiter_email: str, admin: bool, start_date: dateti
            COALESCE(e.recipient_email, '') AS recipient_email
     FROM email_sends e
     LEFT JOIN latest_events le ON le.email_id = e.email_id
-    {where_clause}
-    AND e.sent_timestamp BETWEEN %s AND %s
+    {where_sql}
     {template_filter}
     ORDER BY e.sent_timestamp DESC
     LIMIT %s OFFSET %s
     """
-
-    # Build data params (params already may include template_id)
     data_params = params + [start_date, end_date, limit, offset]
 
+    # --- Execute ---
     with get_db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(count_sql, count_params)
@@ -224,6 +224,7 @@ def fetch_emails_paginated(recruiter_email: str, admin: bool, start_date: dateti
 
     df = pd.DataFrame(rows)
     return df, int(total)
+
 
 
 @st.cache_data(ttl=300)
