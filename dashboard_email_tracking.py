@@ -421,6 +421,7 @@ def render_email_tracking():
     
         # Expandable detailed emails
         # Expandable detailed emails
+        # Expandable detailed emails
         st.markdown("### 📧 View Email Content")
         for _, row in display.iterrows():
             sent_display = pd.to_datetime(row["Sent Date"]).strftime("%Y-%m-%d %H:%M")
@@ -430,22 +431,24 @@ def render_email_tracking():
             elif row["Opened"]:
                 status_label = "opened"
 
-            # Display readable name and firm
             recipient_name = row.get("Recipient") or "(Unknown Recipient)"
+            company_name = row.get("account_name") or "Unknown Firm"
+
+            # Optional Salesforce link for company
             company_link = (
-                f"[View Firm]({build_salesforce_link(None, row.get('account_id'))})"
-                if row.get("account_id") else ""
+                f"[{company_name}]({build_salesforce_link(None, row.get('account_id'))})"
+                if row.get("account_id")
+                else company_name
             )
 
-            # Header now includes recipient name and company info
+            # Header: subject, recipient, company name, timestamp, status
             header = (
-                f"**{row['Subject']}** — {recipient_name} ({row['Recipient Email']})  \n"
-                f"{sent_display} | **Status:** {status_label}  {company_link}"
+                f"**{row['Subject']}** — {recipient_name} | {company_link}  \n"
+                f"{sent_display} | **Status:** {status_label}"
             )
 
             with st.expander(header):
                 if row.get("body_html"):
-                    # Add readable white background for email HTML
                     safe_html = f"""
                     <div style="
                         background-color: white;
