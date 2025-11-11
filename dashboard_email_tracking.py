@@ -461,15 +461,37 @@ def render_email_tracking():
         })
         
         # Convert the Salesforce link to a markdown hyperlink
+        # Convert Salesforce URLs into clickable “View in SF” links
         display["Salesforce Link"] = display["Salesforce Link"].apply(
-            lambda x: f"[View in SF]({x})" if x else ""
+            lambda x: x if x else ""
         )
         
-        # Render as markdown table (safe HTML for clickable links)
-        st.markdown(
-            display.to_markdown(index=False),
-            unsafe_allow_html=True
+        # Reorder and clean columns
+        display = display[
+            [
+                "Sent Date",
+                "Recipient",
+                "Subject",
+                "Template",
+                "Opened",
+                "Replied",
+                "Recipient Email",
+                "Salesforce Link",
+            ]
+        ]
+        
+        # Streamlit interactive data editor (matches other tables)
+        st.data_editor(
+            display,
+            column_config={
+                "Salesforce Link": st.column_config.LinkColumn(
+                    "Salesforce Link", display_text="View in SF"
+                ),
+            },
+            hide_index=True,
+            use_container_width=True,
         )
+
 
 
     # Pagination controls
