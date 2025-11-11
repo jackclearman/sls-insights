@@ -14,6 +14,9 @@ python-dateutil
 pytz
 tzdata
 
+
+tabulate
+
 # --- Visualization ---
 matplotlib
 seaborn
