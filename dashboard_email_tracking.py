@@ -129,6 +129,28 @@ def fetch_emails_paginated(recruiter_email: str, admin: bool, start_date: dateti
     df = pd.DataFrame(rows)
     return df, int(total)
 
+@st.cache_data(ttl=300)
+def fetch_templates(recruiter_email: str, admin: bool) -> pd.DataFrame:
+    """Return templates available to the recruiter (or all for admin)."""
+    where_clause, params = _admin_where_clause(admin, recruiter_email)
+    if where_clause:
+        where_clause = where_clause + " AND e.sf_template_id IS NOT NULL"
+    else:
+        where_clause = "WHERE e.sf_template_id IS NOT NULL"
+
+    sql = f"""
+    SELECT DISTINCT e.sf_template_id AS id, e.sf_template_name AS name
+    FROM email_sends e
+    {where_clause}
+    ORDER BY name
+    """
+
+    with get_db_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+
+    return pd.DataFrame(rows)
 
 
 @st.cache_data(ttl=300)
@@ -457,7 +479,7 @@ def render_email_tracking():
         disp["reply_rate"] = (disp["reply_rate"] * 100).round(1).astype(str) + "%"
         disp["best_open_rate"] = (disp["best_open_rate"] * 100).round(1).astype(str) + "%"
         disp["best_reply_rate"] = (disp["best_reply_rate"] * 100).round(1).astype(str) + "%"
-        st.dataframe(disp[["job_name","template_name","last_sent_at","sent_count","open_rate","reply_rate","best_open_jd","best_open_rate","best_reply_jd","best_reply_rate"]], use_container_width=True)
+        st.dataframe(disp[["job_name","template_name","last_sent_at","sent_count","open_rate","reply_rate","best_open_jd","best_open_rate","best_reply_jd","best_reply_rate"]], width="stretch")
 
 
     # Top templates
@@ -466,7 +488,7 @@ def render_email_tracking():
     if top_templates.empty:
         st.info("No template data for selected range.")
     else:
-        st.dataframe(top_templates.assign(open_rate=lambda d: (d.open_rate * 100).round(1).astype(str) + "%")[["template_name","sent_count","opens","open_rate"]].rename(columns={"template_name":"Template","sent_count":"Sent","opens":"Opens","open_rate":"Open Rate"}), use_container_width=True)
+        st.dataframe(top_templates.assign(open_rate=lambda d: (d.open_rate * 100).round(1).astype(str) + "%")[["template_name","sent_count","opens","open_rate"]].rename(columns={"template_name":"Template","sent_count":"Sent","opens":"Opens","open_rate":"Open Rate"}), width="stretch")
 
     st.markdown("---")
 
@@ -494,7 +516,7 @@ def render_email_tracking():
         display["SF Link"] = display.apply(sf_link, axis=1)
         display = display[["sent_at","Recipient","subject","template_name","opened","replied","recipient_email","SF Link"]]
         display = display.rename(columns={"sent_at":"Sent Date","subject":"Subject","template_name":"Template","opened":"Opened","replied":"Replied","recipient_email":"Recipient Email"})
-        st.dataframe(display, use_container_width=True)
+        st.dataframe(display, width="stretch")
 
     # Pagination controls
     colp1, colp2, colp3 = st.columns([1,6,1])
