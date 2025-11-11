@@ -445,17 +445,45 @@ def render_email_tracking():
     if df_page.empty:
         st.info("No emails found for the selected filters.")
     else:
-        # Build display DataFrame
         def sf_link(row):
             return build_salesforce_link(row.get("contact_id"), row.get("account_id"))
-
+    
         display = df_page.copy()
         display["sent_at"] = pd.to_datetime(display["sent_at"]) if not display["sent_at"].empty else display["sent_at"]
-        display["Recipient"] = display.apply(lambda r: f"{r.get('recipient_name','')} (JD {int(r['recipient_jd_year'])})" if pd.notna(r.get('recipient_jd_year')) else r.get('recipient_name',''), axis=1)
+        display["Recipient"] = display.apply(
+            lambda r: f"{r.get('recipient_name','')} (JD {int(r['recipient_jd_year'])})"
+            if pd.notna(r.get('recipient_jd_year'))
+            else r.get('recipient_name',''),
+            axis=1
+        )
         display["SF Link"] = display.apply(sf_link, axis=1)
-        display = display[["sent_at","Recipient","subject","template_name","opened","replied","recipient_email","SF Link"]]
-        display = display.rename(columns={"sent_at":"Sent Date","subject":"Subject","template_name":"Template","opened":"Opened","replied":"Replied","recipient_email":"Recipient Email"})
-        st.dataframe(display, width="stretch")
+        display = display.rename(columns={
+            "sent_at": "Sent Date",
+            "subject": "Subject",
+            "template_name": "Template",
+            "opened": "Opened",
+            "replied": "Replied",
+            "recipient_email": "Recipient Email",
+            "SF Link": "Salesforce Link"
+        })
+    
+        # Compact summary table
+        st.dataframe(
+            display[["Sent Date", "Recipient", "Subject", "Template", "Opened", "Replied", "Recipient Email", "Salesforce Link"]],
+            width="stretch"
+        )
+    
+        # Expandable email content viewer
+        st.markdown("### 📧 View Email Content")
+        for _, row in display.iterrows():
+            with st.expander(f"{row['Subject']} — {row['Recipient Email']}"):
+                if row.get("body_html"):
+                    st.markdown(row["body_html"], unsafe_allow_html=True)
+                elif row.get("body_text"):
+                    st.text(row["body_text"])
+                else:
+                    st.info("No email body stored for this message.")
+    
 
     # Pagination controls
     colp1, colp2, colp3 = st.columns([1,6,1])
