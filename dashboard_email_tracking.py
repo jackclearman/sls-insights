@@ -107,8 +107,8 @@ def fetch_emails_paginated(
                le.sf_account_id AS account_id,
                e.subject AS subject,
                COALESCE(e.sf_template_name, '(None)') AS template_name,
-               CASE WHEN e.delivery_status ILIKE 'open%' OR e.delivery_status ILIKE 'replied%' THEN TRUE ELSE FALSE END AS opened,
-               CASE WHEN e.delivery_status ILIKE 'replied%' THEN TRUE ELSE FALSE END AS replied,
+               CASE WHEN e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%' THEN TRUE ELSE FALSE END AS opened,
+               CASE WHEN e.delivery_status ILIKE 'replied%%' THEN TRUE ELSE FALSE END AS replied,
 
                COALESCE(e.recipient_email, '') AS recipient_email,
                e.body_html AS body_html,
