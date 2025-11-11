@@ -128,7 +128,9 @@ def fetch_emails_paginated(
     with get_db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(count_sql, count_params)
-            total = cur.fetchone()[0]
+            count_row = cur.fetchone()
+            total = count_row[0] if count_row else 0
+
 
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(data_sql, data_params)
