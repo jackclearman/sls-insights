@@ -462,6 +462,10 @@ def render_email_tracking():
 
             with st.expander(header):
                 if row.get("body_html"):
+                    cleaned_html = row["body_html"]
+                    # Optional: remove <html>, <head>, <body> wrappers if present
+                    for tag in ["<html>", "</html>", "<body>", "</body>", "<head>", "</head>"]:
+                        cleaned_html = cleaned_html.replace(tag, "")
                     safe_html = f"""
                     <div style="
                         background-color: white;
@@ -470,12 +474,12 @@ def render_email_tracking():
                         border-radius: 10px;
                         line-height: 1.6;
                         font-family: Arial, sans-serif;
-                        overflow-x: auto;
                     ">
-                        {row["body_html"]}
+                        {cleaned_html}
                     </div>
                     """
-                    st.markdown(safe_html, unsafe_allow_html=True)
+                    st.components.v1.html(safe_html, height=600, scrolling=True)
+
                 elif row.get("body_text"):
                     st.markdown(
                         f"""
