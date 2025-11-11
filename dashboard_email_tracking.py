@@ -187,7 +187,6 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
         where_sql = where_clause + " AND e.sent_timestamp BETWEEN %s AND %s"
     else:
         where_sql = "WHERE e.sent_timestamp BETWEEN %s AND %s"
-
     sql = f"""
     SELECT
       COUNT(*) AS total_sent,
@@ -195,8 +194,11 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
       COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%%') AS total_replies
     FROM email_sends e
     {where_sql}
+    AND e.sf_job_name IS NOT NULL
+    AND e.sf_template_name IS NOT NULL
     {template_filter}
     """
+
 
     params = base_params + [start_date, end_date] + template_params
     with get_db_conn() as conn:
@@ -266,12 +268,12 @@ def fetch_performance_by_job(
         where_sql = where_clause + " AND e.sent_timestamp BETWEEN %s AND %s"
     else:
         where_sql = "WHERE e.sent_timestamp BETWEEN %s AND %s"
-
+    
     sql = f"""
     WITH per_job AS (
         SELECT
             e.sf_job_id AS job_id,
-            COALESCE(e.sf_job_name, '(Unspecified)') AS job_name,
+            e.sf_job_name AS job_name,
             COUNT(*) AS sent_count,
             COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%') AS opens,
             COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%%') AS replies,
@@ -282,6 +284,8 @@ def fetch_performance_by_job(
             MAX(e.sent_timestamp) AS last_sent_at
         FROM email_sends e
         {where_sql}
+        AND e.sf_job_name IS NOT NULL
+        AND e.sf_template_name IS NOT NULL
         {template_filter}
         GROUP BY e.sf_job_id, e.sf_job_name
     )
@@ -290,6 +294,7 @@ def fetch_performance_by_job(
     ORDER BY last_sent_at DESC NULLS LAST
     LIMIT %s
     """
+
 
     params = base_params + [start_date, end_date] + template_params + [limit]
     with get_db_conn() as conn:
