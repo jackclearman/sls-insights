@@ -48,12 +48,14 @@ def get_db_conn():
 
 
 def _admin_where_clause(admin: bool, recruiter_email: str) -> Tuple[str, list]:
-    """Return a WHERE clause and params for recruiter vs admin scoping.
-
-    NOTE: we build SQL fragments here (not user inputs) and keep values in params.
+    """
+    Return WHERE clause and params.
+    Now: anyone can view company-wide metrics when admin=True.
     """
     if admin:
+        # no recruiter filter → company-wide view
         return "", []
+    # default: restrict to recruiter's own emails
     return "WHERE e.recruiter_email = %s", [recruiter_email]
 
 
@@ -310,10 +312,9 @@ def render_email_tracking():
         st.error("User not logged in (st.session_state['user_email'] missing)")
         return
 
-    is_admin_user = user_email in ADMIN_EMAILS
-    admin_view = False
-    if is_admin_user:
-        admin_view = st.checkbox("Admin view (company-wide metrics)", value=False)
+    # Everyone can toggle company-wide metrics now
+    admin_view = st.checkbox("View company-wide metrics", value=False)
+    
 
     # Time window selector (quick choices) with default 14 days
     window_label = st.selectbox("Time window", ["1 day", "7 days", "2 weeks", "30 days", "90 days", "180 days", "1 year"], index=2)
