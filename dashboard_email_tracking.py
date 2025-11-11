@@ -414,11 +414,12 @@ def render_email_tracking():
         })
     
         # Summary table
-        st.dataframe(
-            display[["Sent Date", "Recipient", "Subject", "Template", "Opened", "Replied", "Recipient Email", "Salesforce Link"]],
-            width="stretch"
-        )
+  ##      st.dataframe(
+    ##        display[["Sent Date", "Recipient", "Subject", "Template", "Opened", "Replied", "Recipient Email", "Salesforce Link"]],
+      #      width="stretch"
+       # )
     
+        # Expandable detailed emails
         # Expandable detailed emails
         st.markdown("### 📧 View Email Content")
         for _, row in display.iterrows():
@@ -428,15 +429,57 @@ def render_email_tracking():
                 status_label = "replied"
             elif row["Opened"]:
                 status_label = "opened"
-            
-            header = f"**{row['Subject']}** — {row['Recipient Email']}  \n{sent_display} | **Email Status:** {status_label}"
+
+            # Display readable name and firm
+            recipient_name = row.get("Recipient") or "(Unknown Recipient)"
+            company_link = (
+                f"[View Firm]({build_salesforce_link(None, row.get('account_id'))})"
+                if row.get("account_id") else ""
+            )
+
+            # Header now includes recipient name and company info
+            header = (
+                f"**{row['Subject']}** — {recipient_name} ({row['Recipient Email']})  \n"
+                f"{sent_display} | **Status:** {status_label}  {company_link}"
+            )
+
             with st.expander(header):
                 if row.get("body_html"):
-                    st.markdown(row["body_html"], unsafe_allow_html=True)
+                    # Add readable white background for email HTML
+                    safe_html = f"""
+                    <div style="
+                        background-color: white;
+                        color: black;
+                        padding: 16px;
+                        border-radius: 10px;
+                        line-height: 1.6;
+                        font-family: Arial, sans-serif;
+                        overflow-x: auto;
+                    ">
+                        {row["body_html"]}
+                    </div>
+                    """
+                    st.markdown(safe_html, unsafe_allow_html=True)
                 elif row.get("body_text"):
-                    st.text(row["body_text"])
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background-color: white;
+                            color: black;
+                            padding: 16px;
+                            border-radius: 10px;
+                            line-height: 1.6;
+                            font-family: Arial, sans-serif;
+                            white-space: pre-wrap;
+                        ">
+                            {row["body_text"]}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                 else:
                     st.info("No email body stored for this message.")
+
 
     
 
