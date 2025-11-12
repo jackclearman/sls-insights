@@ -50,10 +50,9 @@ def get_db_conn():
 def _admin_where_clause(admin: bool, recruiter_email: str) -> Tuple[str, list]:
     """Return WHERE clause and params for recruiter vs admin scoping."""
     if admin:
-        # Exclude test accounts directly in SQL
+        # No placeholders, company-wide scope minus test senders
         return "WHERE e.recruiter_email NOT IN ('jack@swanlegal.com', 'jenny@swanlegal.com')", []
     return "WHERE e.recruiter_email = %s", [recruiter_email]
-
 
 
 
@@ -168,10 +167,15 @@ def fetch_templates(recruiter_email: str, admin: bool) -> pd.DataFrame:
 
     return pd.DataFrame(rows)
 
-
 @st.cache_data(ttl=300)
-def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date: datetime, template_id: Optional[str] = None) -> dict:
-    """Fetch KPI metrics using same open/reply logic as bottom section."""
+def fetch_kpis(
+    recruiter_email: str,
+    admin: bool,
+    start_date: datetime,
+    end_date: datetime,
+    template_id: Optional[str] = None
+) -> dict:
+    """Fetch KPI metrics for recruiter or company-wide view."""
     where_clause, base_params = _admin_where_clause(admin, recruiter_email)
     template_filter = ""
     template_params = []
@@ -179,6 +183,7 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
         template_filter = " AND e.sf_template_id = %s"
         template_params = [template_id]
 
+    # Build WHERE clause correctly
     if where_clause:
         where_sql = where_clause + " AND e.sent_timestamp BETWEEN %s AND %s"
     else:
@@ -196,14 +201,10 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
     {template_filter}
     """
 
+    # Combine parameters
     params = base_params + [start_date, end_date] + template_params
 
-    expected = sql.split("%s").__len__() - 1 - sql.count("ILIKE '")
-
-    if expected != len(params):
-        st.error(f"Parameter mismatch in KPI query: expected {expected}, got {len(params)}")
-        st.stop()
-
+    # ✅ Remove fragile manual count check (psycopg2 validates automatically)
     with get_db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
@@ -211,11 +212,13 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
 
     if not row:
         return {"total_sent": 0, "total_opens": 0, "total_replies": 0}
+
     return {
         "total_sent": int(row[0] or 0),
         "total_opens": int(row[1] or 0),
         "total_replies": int(row[2] or 0),
     }
+
 @st.cache_data(ttl=300)
 def fetch_top_templates(recruiter_email: str, admin: bool, start_date: datetime, end_date: datetime, top_n: int = 10) -> pd.DataFrame:
     """Return top templates by open rate, matching bottom-section logic."""
