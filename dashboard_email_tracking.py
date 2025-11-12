@@ -191,8 +191,9 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
     sql = f"""
     SELECT
       COUNT(*) AS total_sent,
-      COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%') AS total_opens,
-      COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%%') AS total_replies
+      COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%' OR e.delivery_status ILIKE 'replied%') AS total_opens,
+      COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%') AS total_replies
+
     FROM email_sends e
     {where_sql}
     AND e.sf_job_name IS NOT NULL
