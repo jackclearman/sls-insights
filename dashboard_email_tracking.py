@@ -48,17 +48,12 @@ def get_db_conn():
 
 
 def _admin_where_clause(admin: bool, recruiter_email: str) -> Tuple[str, list]:
-    """
-    Returns WHERE clause and params for recruiter vs company-wide view.
-    - If admin=False: restricts to that recruiter's emails.
-    - If admin=True: company-wide, but excludes test emails like jack@swanlegal.com.
-    """
+    """Return WHERE clause and params for recruiter vs admin scoping."""
     if admin:
-        # exclude test senders from company-wide data
-        return "WHERE e.recruiter_email NOT IN (%s)", ["jack@swanlegal.com"]
-    else:
-        # normal user-specific filtering
-        return "WHERE e.recruiter_email = %s", [recruiter_email]
+        # Exclude test accounts directly in SQL
+        return "WHERE e.recruiter_email NOT IN ('jack@swanlegal.com', 'jenny@swanlegal.com')", []
+    return "WHERE e.recruiter_email = %s", [recruiter_email]
+
 
 
 
@@ -203,7 +198,8 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
 
     params = base_params + [start_date, end_date] + template_params
 
-    expected = sql.count("%s")
+    expected = sql.split("%s").__len__() - 1 - sql.count("ILIKE '")
+
     if expected != len(params):
         st.error(f"Parameter mismatch in KPI query: expected {expected}, got {len(params)}")
         st.stop()
@@ -234,8 +230,8 @@ def fetch_top_templates(recruiter_email: str, admin: bool, start_date: datetime,
         e.sf_template_id AS template_id,
         e.sf_template_name AS template_name,
         COUNT(*) AS sent_count,
-        COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%') AS opens,
-        (COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%')::float
+        COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%' OR e.delivery_status ILIKE 'replied%') AS opens,
+        (COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%' OR e.delivery_status ILIKE 'replied%')::float
          / NULLIF(COUNT(*), 0)) AS open_rate
     FROM email_sends e
     {where_sql}
@@ -286,11 +282,11 @@ def fetch_performance_by_job(
             e.sf_job_id AS job_id,
             e.sf_job_name AS job_name,
             COUNT(*) AS sent_count,
-            COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%') AS opens,
-            COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%%') AS replies,
-            (COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%')::float
+            COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%' OR e.delivery_status ILIKE 'replied%') AS opens,
+            COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%') AS replies,
+            (COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%' OR e.delivery_status ILIKE 'replied%')::float
              / NULLIF(COUNT(*),0)) AS open_rate,
-            (COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%%')::float
+            (COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%')::float
              / NULLIF(COUNT(*),0)) AS reply_rate,
             MAX(e.sent_timestamp) AS last_sent_at
         FROM email_sends e
