@@ -188,12 +188,12 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
         where_sql = where_clause + " AND e.sent_timestamp BETWEEN %s AND %s"
     else:
         where_sql = "WHERE e.sent_timestamp BETWEEN %s AND %s"
+
     sql = f"""
     SELECT
       COUNT(*) AS total_sent,
       COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%' OR e.delivery_status ILIKE 'replied%') AS total_opens,
       COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%') AS total_replies
-
     FROM email_sends e
     {where_sql}
     AND e.sf_job_name IS NOT NULL
@@ -201,16 +201,25 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
     {template_filter}
     """
 
-
     params = base_params + [start_date, end_date] + template_params
+
+    expected = sql.count("%s")
+    if expected != len(params):
+        st.error(f"Parameter mismatch in KPI query: expected {expected}, got {len(params)}")
+        st.stop()
+
     with get_db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
             row = cur.fetchone()
+
     if not row:
         return {"total_sent": 0, "total_opens": 0, "total_replies": 0}
-    return {"total_sent": int(row[0] or 0), "total_opens": int(row[1] or 0), "total_replies": int(row[2] or 0)}
-
+    return {
+        "total_sent": int(row[0] or 0),
+        "total_opens": int(row[1] or 0),
+        "total_replies": int(row[2] or 0),
+    }
 @st.cache_data(ttl=300)
 def fetch_top_templates(recruiter_email: str, admin: bool, start_date: datetime, end_date: datetime, top_n: int = 10) -> pd.DataFrame:
     """Return top templates by open rate, matching bottom-section logic."""
