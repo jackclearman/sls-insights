@@ -47,18 +47,14 @@ def get_db_conn():
     return psycopg2.connect(**params)
 
 
-def _admin_where_clause(admin: bool, recruiter_email: str) -> Tuple[str, list]:
-    """
-    Returns WHERE clause and params for recruiter vs company-wide view.
-    - If admin=False: restricts to that recruiter's emails.
-    - If admin=True: company-wide, but excludes test emails like jack@swanlegal.com.
-    """
+def _admin_where_clause(admin: bool, recruiter_email: str):
     if admin:
-        # exclude test senders from company-wide data
+        # Always exclude Jack’s test sends, regardless of who’s logged in
         return "WHERE e.recruiter_email NOT IN (%s)", ["jack@swanlegal.com"]
     else:
-        # normal user-specific filtering
+        # Normal recruiter view (only their own emails)
         return "WHERE e.recruiter_email = %s", [recruiter_email]
+
 
 
 
