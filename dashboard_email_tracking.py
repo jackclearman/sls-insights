@@ -112,6 +112,7 @@ def fetch_emails_paginated(
                le.sf_account_id AS account_id,
                e.company_name AS company_name,
                e.subject AS subject,
+               e.delivery_status,
                COALESCE(e.sf_template_name, '(None)') AS template_name,
 
 
