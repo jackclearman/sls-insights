@@ -10,6 +10,17 @@ import streamlit as st
 # Admin emails who can toggle company-wide view
 ADMIN_EMAILS = {"jack@swanlegal.com", "jenny@swanlegal.com"}
 PST = pytz.timezone("America/Los_Angeles")
+def to_pst_safe(dt):
+    """Convert any datetime-like value to PST safely."""
+    if pd.isna(dt):
+        return None
+    ts = pd.to_datetime(dt, errors="coerce")
+    if ts is None:
+        return None
+    # If tz-naive, assume UTC
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    return ts.tz_convert(PST)
 
 def get_db_conn():
     """Open a new DB connection using environment variables.
@@ -368,7 +379,10 @@ def render_email_tracking():
         disp = perf_df.copy()
         disp["open_rate"] = (disp["open_rate"] * 100).round(1).astype(str) + "%"
         disp["reply_rate"] = (disp["reply_rate"] * 100).round(1).astype(str) + "%"
-        disp["last_sent_at"] = pd.to_datetime(disp["last_sent_at"]).dt.tz_convert(PST).dt.strftime("%Y-%m-%d %I:%M %p")
+#        disp["last_sent_at"] = pd.to_datetime(disp["last_sent_at"]).dt.tz_convert(PST).dt.strftime("%Y-%m-%d %I:%M %p")
+        disp["last_sent_at"] = disp["last_sent_at"].apply(
+            lambda x: to_pst_safe(x).strftime("%Y-%m-%d %I:%M %p") if pd.notna(x) else ""
+        )
 
         
         st.dataframe(
@@ -434,14 +448,10 @@ def render_email_tracking():
         # Expandable detailed emails
         st.markdown("### 📧 View Email Content")
         for _, row in display.iterrows():
-            sent_display = (
-                pd.to_datetime(row["Sent Date"])
-                .dt.tz_localize("UTC")
-                .dt.tz_convert(PST)
-                .dt.strftime("%Y-%m-%d %I:%M %p")
-                if isinstance(row["Sent Date"], pd.Series)
-                else pd.Timestamp(row["Sent Date"], tz="UTC").tz_convert(PST).strftime("%Y-%m-%d %I:%M %p")
-            )
+            pst_time = to_pst_safe(row["Sent Date"])
+            sent_display = pst_time.strftime("%Y-%m-%d %I:%M %p") if pst_time else "(no timestamp)"
+            
+
 
             status_label = (row.get("Status") or "sent").lower()
             if row.get("Replied", False):
