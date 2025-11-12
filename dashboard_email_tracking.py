@@ -9,7 +9,7 @@ import streamlit as st
 
 # Admin emails who can toggle company-wide view
 ADMIN_EMAILS = {"jack@swanlegal.com", "jenny@swanlegal.com"}
-
+PST = pytz.timezone("America/Los_Angeles")
 
 def get_db_conn():
     """Open a new DB connection using environment variables.
@@ -368,6 +368,8 @@ def render_email_tracking():
         disp = perf_df.copy()
         disp["open_rate"] = (disp["open_rate"] * 100).round(1).astype(str) + "%"
         disp["reply_rate"] = (disp["reply_rate"] * 100).round(1).astype(str) + "%"
+        disp["last_sent_at"] = pd.to_datetime(disp["last_sent_at"]).dt.tz_convert(PST).dt.strftime("%Y-%m-%d %I:%M %p")
+
         
         st.dataframe(
             disp[["job_name", "last_sent_at", "sent_count", "open_rate", "reply_rate"]],
@@ -432,7 +434,15 @@ def render_email_tracking():
         # Expandable detailed emails
         st.markdown("### 📧 View Email Content")
         for _, row in display.iterrows():
-            sent_display = pd.to_datetime(row["Sent Date"]).strftime("%Y-%m-%d %H:%M")
+            sent_display = (
+                pd.to_datetime(row["Sent Date"])
+                .dt.tz_localize("UTC")
+                .dt.tz_convert(PST)
+                .dt.strftime("%Y-%m-%d %I:%M %p")
+                if isinstance(row["Sent Date"], pd.Series)
+                else pd.Timestamp(row["Sent Date"], tz="UTC").tz_convert(PST).strftime("%Y-%m-%d %I:%M %p")
+            )
+
             status_label = (row.get("Status") or "sent").lower()
             if row.get("Replied", False):
                 status_label = "replied"
