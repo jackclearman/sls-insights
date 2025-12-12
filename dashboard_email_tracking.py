@@ -10,6 +10,8 @@ import streamlit as st
 # Admin emails who can toggle company-wide view
 ADMIN_EMAILS = {"jack@swanlegal.com", "jenny@swanlegal.com"}
 PST = pytz.timezone("America/Los_Angeles")
+
+
 def to_pst_safe(dt):
     """Convert any datetime-like value to PST safely."""
     if pd.isna(dt):
@@ -21,6 +23,7 @@ def to_pst_safe(dt):
     if ts.tzinfo is None:
         ts = ts.tz_localize("UTC")
     return ts.tz_convert(PST)
+
 
 def get_db_conn():
     """Open a new DB connection using environment variables.
@@ -67,8 +70,6 @@ def _admin_where_clause(admin: bool, recruiter_email: str):
         return "WHERE e.recruiter_email = %s", [recruiter_email]
 
 
-
-
 @st.cache_data(ttl=300)
 def fetch_emails_paginated(
     recruiter_email: str,
@@ -91,12 +92,12 @@ def fetch_emails_paginated(
         where_sql = f"WHERE {date_filter}"
 
     template_filter = ""
-    template_params = []
+    template_params: list = []
     if template_id:
         template_filter = " AND e.sf_template_id = %s"
         template_params = [template_id]
 
-    # ✅ Correct param order: recruiter_email → start_date → end_date → template_id
+    # Count query
     count_sql = f"""
         SELECT COUNT(*)
         FROM email_sends e
@@ -105,30 +106,26 @@ def fetch_emails_paginated(
     """
     count_params = base_params + [start_date, end_date] + template_params
 
+    # Data query – includes open/reply fields and uses sf_account_id directly
     data_sql = f"""
-        WITH latest_events AS (
-            SELECT DISTINCT ON (email_id) email_id, sf_account_id
-            FROM email_tracking_events
-            ORDER BY email_id, event_timestamp DESC
-        )
-        SELECT e.sent_timestamp AS sent_at,
-               e.delivery_status AS delivery_status,
-               e.contact_name,
-               e.recipient_jd_year,
-               e.sf_email_recipient_id AS contact_id,
-               le.sf_account_id AS account_id,
-               e.company_name AS company_name,
-               e.subject AS subject,
-               COALESCE(e.sf_template_name, '(None)') AS template_name,
-
-
-               COALESCE(e.recipient_email, '') AS recipient_email,
-               e.body_html AS body_html,
-               e.body_text AS body_text
-
-
+        SELECT
+            e.sent_timestamp AS sent_at,
+            e.delivery_status AS delivery_status,
+            e.contact_name,
+            e.recipient_jd_year,
+            e.sf_email_recipient_id AS contact_id,
+            e.sf_account_id AS account_id,
+            e.company_name AS company_name,
+            e.subject AS subject,
+            COALESCE(e.sf_template_name, '(None)') AS template_name,
+            COALESCE(e.recipient_email, '') AS recipient_email,
+            e.body_html AS body_html,
+            e.body_text AS body_text,
+            e.open_count,
+            e.click_count,
+            e.replied,
+            e.reply_received_at
         FROM email_sends e
-        LEFT JOIN latest_events le ON le.email_id = e.email_id
         {where_sql}
         {template_filter}
         ORDER BY e.sent_timestamp DESC
@@ -136,25 +133,25 @@ def fetch_emails_paginated(
     """
     data_params = base_params + [start_date, end_date] + template_params + [limit, offset]
 
-    # --- Execute queries safely
     with get_db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(count_sql, count_params)
             count_row = cur.fetchone()
             total = count_row[0] if count_row else 0
-    
+
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             expected_placeholders = data_sql.count("%s")
             if len(data_params) != expected_placeholders:
-                st.error(f"Parameter mismatch in email query: expected {expected_placeholders}, got {len(data_params)}")
+                st.error(
+                    f"Parameter mismatch in email query: expected {expected_placeholders}, got {len(data_params)}"
+                )
                 st.stop()
-    
             cur.execute(data_sql, data_params)
             rows = cur.fetchall()
 
-
     df = pd.DataFrame(rows)
     return df, int(total)
+
 
 @st.cache_data(ttl=300)
 def fetch_templates(recruiter_email: str, admin: bool) -> pd.DataFrame:
@@ -181,11 +178,17 @@ def fetch_templates(recruiter_email: str, admin: bool) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=300)
-def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date: datetime, template_id: Optional[str] = None) -> dict:
-    """Fetch KPI metrics using same open/reply logic as bottom section."""
+def fetch_kpis(
+    recruiter_email: str,
+    admin: bool,
+    start_date: datetime,
+    end_date: datetime,
+    template_id: Optional[str] = None,
+) -> dict:
+    """Fetch KPI metrics based on open_count/replied, not delivery_status text."""
     where_clause, base_params = _admin_where_clause(admin, recruiter_email)
     template_filter = ""
-    template_params = []
+    template_params: list = []
     if template_id:
         template_filter = " AND e.sf_template_id = %s"
         template_params = [template_id]
@@ -194,11 +197,19 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
         where_sql = where_clause + " AND e.sent_timestamp BETWEEN %s AND %s"
     else:
         where_sql = "WHERE e.sent_timestamp BETWEEN %s AND %s"
+
     sql = f"""
     SELECT
       COUNT(*) AS total_sent,
-      COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%') AS total_opens,
-      COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%%') AS total_replies
+      COUNT(*) FILTER (
+        WHERE COALESCE(e.open_count, 0) > 0
+           OR e.replied IS TRUE
+           OR e.reply_received_at IS NOT NULL
+      ) AS total_opens,
+      COUNT(*) FILTER (
+        WHERE e.replied IS TRUE
+           OR e.reply_received_at IS NOT NULL
+      ) AS total_replies
     FROM email_sends e
     {where_sql}
     AND e.sf_job_name IS NOT NULL
@@ -206,19 +217,31 @@ def fetch_kpis(recruiter_email: str, admin: bool, start_date: datetime, end_date
     {template_filter}
     """
 
-
     params = base_params + [start_date, end_date] + template_params
     with get_db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
             row = cur.fetchone()
+
     if not row:
         return {"total_sent": 0, "total_opens": 0, "total_replies": 0}
-    return {"total_sent": int(row[0] or 0), "total_opens": int(row[1] or 0), "total_replies": int(row[2] or 0)}
+
+    return {
+        "total_sent": int(row[0] or 0),
+        "total_opens": int(row[1] or 0),
+        "total_replies": int(row[2] or 0),
+    }
+
 
 @st.cache_data(ttl=300)
-def fetch_top_templates(recruiter_email: str, admin: bool, start_date: datetime, end_date: datetime, top_n: int = 10) -> pd.DataFrame:
-    """Return top templates by open rate, matching bottom-section logic."""
+def fetch_top_templates(
+    recruiter_email: str,
+    admin: bool,
+    start_date: datetime,
+    end_date: datetime,
+    top_n: int = 10,
+) -> pd.DataFrame:
+    """Return top templates by open rate using open_count/replied flags."""
     where_clause, params = _admin_where_clause(admin, recruiter_email)
     if where_clause:
         where_sql = where_clause + " AND e.sent_timestamp BETWEEN %s AND %s"
@@ -230,9 +253,19 @@ def fetch_top_templates(recruiter_email: str, admin: bool, start_date: datetime,
         e.sf_template_id AS template_id,
         e.sf_template_name AS template_name,
         COUNT(*) AS sent_count,
-        COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%') AS opens,
-        (COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%')::float
-         / NULLIF(COUNT(*), 0)) AS open_rate
+        COUNT(*) FILTER (
+          WHERE COALESCE(e.open_count, 0) > 0
+             OR e.replied IS TRUE
+             OR e.reply_received_at IS NOT NULL
+        ) AS opens,
+        (
+          COUNT(*) FILTER (
+            WHERE COALESCE(e.open_count, 0) > 0
+               OR e.replied IS TRUE
+               OR e.reply_received_at IS NOT NULL
+          )::float
+          / NULLIF(COUNT(*), 0)
+        ) AS open_rate
     FROM email_sends e
     {where_sql}
     AND e.sf_template_name IS NOT NULL
@@ -243,15 +276,12 @@ def fetch_top_templates(recruiter_email: str, admin: bool, start_date: datetime,
     LIMIT %s
     """
 
-
     query_params = params + [start_date, end_date, top_n]
     with get_db_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, query_params)
             rows = cur.fetchall()
     return pd.DataFrame(rows)
-
-
 
 
 @st.cache_data(ttl=300)
@@ -261,12 +291,12 @@ def fetch_performance_by_job(
     start_date: datetime,
     end_date: datetime,
     template_id: Optional[str] = None,
-    limit: int = 100
+    limit: int = 100,
 ) -> pd.DataFrame:
-    """Aggregate performance metrics per job using same open/reply logic as bottom section."""
+    """Aggregate performance metrics per job using open_count/replied logic."""
     where_clause, base_params = _admin_where_clause(admin, recruiter_email)
     template_filter = ""
-    template_params = []
+    template_params: list = []
     if template_id:
         template_filter = " AND e.sf_template_id = %s"
         template_params = [template_id]
@@ -275,19 +305,37 @@ def fetch_performance_by_job(
         where_sql = where_clause + " AND e.sent_timestamp BETWEEN %s AND %s"
     else:
         where_sql = "WHERE e.sent_timestamp BETWEEN %s AND %s"
-    
+
     sql = f"""
     WITH per_job AS (
         SELECT
             e.sf_job_id AS job_id,
             e.sf_job_name AS job_name,
             COUNT(*) AS sent_count,
-            COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%') AS opens,
-            COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%%') AS replies,
-            (COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'open%%' OR e.delivery_status ILIKE 'replied%%')::float
-             / NULLIF(COUNT(*),0)) AS open_rate,
-            (COUNT(*) FILTER (WHERE e.delivery_status ILIKE 'replied%%')::float
-             / NULLIF(COUNT(*),0)) AS reply_rate,
+            COUNT(*) FILTER (
+              WHERE COALESCE(e.open_count, 0) > 0
+                 OR e.replied IS TRUE
+                 OR e.reply_received_at IS NOT NULL
+            ) AS opens,
+            COUNT(*) FILTER (
+              WHERE e.replied IS TRUE
+                 OR e.reply_received_at IS NOT NULL
+            ) AS replies,
+            (
+              COUNT(*) FILTER (
+                WHERE COALESCE(e.open_count, 0) > 0
+                   OR e.replied IS TRUE
+                   OR e.reply_received_at IS NOT NULL
+              )::float
+              / NULLIF(COUNT(*),0)
+            ) AS open_rate,
+            (
+              COUNT(*) FILTER (
+                WHERE e.replied IS TRUE
+                   OR e.reply_received_at IS NOT NULL
+              )::float
+              / NULLIF(COUNT(*),0)
+            ) AS reply_rate,
             MAX(e.sent_timestamp) AS last_sent_at
         FROM email_sends e
         {where_sql}
@@ -302,7 +350,6 @@ def fetch_performance_by_job(
     LIMIT %s
     """
 
-
     params = base_params + [start_date, end_date] + template_params + [limit]
     with get_db_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -312,7 +359,10 @@ def fetch_performance_by_job(
 
 
 def build_salesforce_link(contact_id: Optional[str], account_id: Optional[str]) -> str:
-    base = os.environ.get("SALESFORCE_BASE_URL", "https://momentum-site-8441.lightning.force.com/")
+    base = os.environ.get(
+        "SALESFORCE_BASE_URL",
+        "https://momentum-site-8441.lightning.force.com/",
+    )
     if contact_id:
         return f"{base}/{contact_id}/view"
     if account_id:
@@ -332,11 +382,22 @@ def render_email_tracking():
 
     # Everyone can toggle company-wide metrics now
     admin_view = st.checkbox("View company-wide metrics", value=False)
-    
 
     # Time window selector (quick choices) with default 14 days
-    window_label = st.selectbox("Time window", ["1 day", "7 days", "2 weeks", "30 days", "90 days", "180 days", "1 year"], index=2)
-    mapping = {"1 day":1, "7 days":7, "2 weeks":14, "30 days":30, "90 days":90, "180 days":180, "1 year":365}
+    window_label = st.selectbox(
+        "Time window",
+        ["1 day", "7 days", "2 weeks", "30 days", "90 days", "180 days", "1 year"],
+        index=2,
+    )
+    mapping = {
+        "1 day": 1,
+        "7 days": 7,
+        "2 weeks": 14,
+        "30 days": 30,
+        "90 days": 90,
+        "180 days": 180,
+        "1 year": 365,
+    }
     days = mapping[window_label]
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
@@ -350,7 +411,6 @@ def render_email_tracking():
     template_display = [t[0] for t in template_options]
     sel_idx = st.selectbox("Template", template_display)
     template_id = None
-    # find selected id
     for name, tid in template_options:
         if name == sel_idx:
             template_id = tid
@@ -367,29 +427,29 @@ def render_email_tracking():
 
     # Performance by Job
     st.subheader("Performance by Job")
-    st.markdown("""
+    st.markdown(
+        """
     Shows per-job performance: job name, template, last sent date, emails sent, open & reply rates,
     and the JD year with the highest open rate and reply rate.
-    """)
-    perf_df = fetch_performance_by_job(user_email, admin_view, start_date, end_date, template_id, limit=100)
+    """
+    )
+    perf_df = fetch_performance_by_job(
+        user_email, admin_view, start_date, end_date, template_id, limit=100
+    )
     if perf_df.empty:
         st.info("No job-level data for the selected filters.")
     else:
-        # format rates
         disp = perf_df.copy()
         disp["open_rate"] = (disp["open_rate"] * 100).round(1).astype(str) + "%"
         disp["reply_rate"] = (disp["reply_rate"] * 100).round(1).astype(str) + "%"
-#        disp["last_sent_at"] = pd.to_datetime(disp["last_sent_at"]).dt.tz_convert(PST).dt.strftime("%Y-%m-%d %I:%M %p")
         disp["last_sent_at"] = disp["last_sent_at"].apply(
             lambda x: to_pst_safe(x).strftime("%Y-%m-%d %I:%M %p") if pd.notna(x) else ""
         )
 
-        
         st.dataframe(
             disp[["job_name", "last_sent_at", "sent_count", "open_rate", "reply_rate"]],
-            width="stretch"
+            width="stretch",
         )
-
 
     # Top templates
     st.subheader("Top Templates by Open Rate")
@@ -397,7 +457,19 @@ def render_email_tracking():
     if top_templates.empty:
         st.info("No template data for selected range.")
     else:
-        st.dataframe(top_templates.assign(open_rate=lambda d: (d.open_rate * 100).round(1).astype(str) + "%")[["template_name","sent_count","opens","open_rate"]].rename(columns={"template_name":"Template","sent_count":"Sent","opens":"Opens","open_rate":"Open Rate"}), width="stretch")
+        st.dataframe(
+            top_templates.assign(
+                open_rate=lambda d: (d.open_rate * 100).round(1).astype(str) + "%"
+            )[["template_name", "sent_count", "opens", "open_rate"]].rename(
+                columns={
+                    "template_name": "Template",
+                    "sent_count": "Sent",
+                    "opens": "Opens",
+                    "open_rate": "Open Rate",
+                }
+            ),
+            width="stretch",
+        )
 
     st.markdown("---")
 
@@ -408,57 +480,65 @@ def render_email_tracking():
         st.session_state.email_page = 0
 
     offset = st.session_state.email_page * page_size
-    df_page, total = fetch_emails_paginated(user_email, admin_view, start_date, end_date, template_id, limit=page_size, offset=offset)
+    df_page, total = fetch_emails_paginated(
+        user_email, admin_view, start_date, end_date, template_id, limit=page_size, offset=offset
+    )
 
-    st.write(f"Showing {min(total, offset+1)}-{min(total, offset+page_size)} of {total:,} emails")
+    st.write(
+        f"Showing {min(total, offset+1)}-{min(total, offset+page_size)} of {total:,} emails"
+    )
     if df_page.empty:
         st.info("No emails found for the selected filters.")
     else:
-        def sf_link(row):
-            return build_salesforce_link(row.get("contact_id"), row.get("account_id"))
-    
         display = df_page.copy()
-        display["sent_at"] = pd.to_datetime(display["sent_at"]) if not display["sent_at"].empty else display["sent_at"]
+
+        # Convert sent_at to datetime
+        if not display["sent_at"].empty:
+            display["sent_at"] = pd.to_datetime(display["sent_at"])
+
+        # Opened / Replied flags from numeric/boolean fields
+        display["Opened"] = (
+            display.get("open_count", 0).fillna(0) > 0
+        ) | display.get("replied", False).fillna(False) | display.get("reply_received_at").notna()
+
+        display["Replied"] = (
+            display.get("replied", False).fillna(False)
+            | display.get("reply_received_at").notna()
+        )
+
         display["Recipient"] = display.apply(
             lambda r: f"{r.get('contact_name','')} (JD {int(r['recipient_jd_year'])})"
-            if pd.notna(r.get('recipient_jd_year'))
-            else r.get('contact_name',''),
-            axis=1
+            if pd.notna(r.get("recipient_jd_year"))
+            else r.get("contact_name", ""),
+            axis=1,
         )
-        display["SF Link"] = display.apply(sf_link, axis=1)
-        display = display.rename(columns={
-            "sent_at": "Sent Date",
-            "subject": "Subject",
-            "template_name": "Template",
-            "opened": "Opened",
-            "replied": "Replied",
-            "recipient_email": "Recipient Email",
-            "SF Link": "Salesforce Link",
-            "delivery_status": "Status"
-        })
-    
-        # Summary table
-  ##      st.dataframe(
-    ##        display[["Sent Date", "Recipient", "Subject", "Template", "Opened", "Replied", "Recipient Email", "Salesforce Link"]],
-      #      width="stretch"
-       # )
-    
-        # Expandable detailed emails
-        # Expandable detailed emails
-        # Expandable detailed emails
+
+        display["SF Link"] = display.apply(
+            lambda r: build_salesforce_link(r.get("contact_id"), r.get("account_id")), axis=1
+        )
+
+        display = display.rename(
+            columns={
+                "sent_at": "Sent Date",
+                "subject": "Subject",
+                "template_name": "Template",
+                "recipient_email": "Recipient Email",
+                "delivery_status": "Status",
+            }
+        )
+
         st.markdown("### 📧 View Email Content")
         for _, row in display.iterrows():
             pst_time = to_pst_safe(row["Sent Date"])
-            sent_display = pst_time.strftime("%Y-%m-%d %I:%M %p") if pst_time else "(no timestamp)"
-            
-
+            sent_display = (
+                pst_time.strftime("%Y-%m-%d %I:%M %p") if pst_time else "(no timestamp)"
+            )
 
             status_label = (row.get("Status") or "sent").lower()
             if row.get("Replied", False):
                 status_label = "replied"
             elif row.get("Opened", False):
                 status_label = "opened"
-
 
             recipient_name = row.get("Recipient") or "(Unknown Recipient)"
             company_name = row.get("company_name") or "Unknown Firm"
@@ -516,11 +596,8 @@ def render_email_tracking():
                 else:
                     st.info("No email body stored for this message.")
 
-
-    
-
     # Pagination controls
-    colp1, colp2, colp3 = st.columns([1,6,1])
+    colp1, colp2, colp3 = st.columns([1, 6, 1])
     with colp1:
         if st.button("Prev"):
             if st.session_state.email_page > 0:
