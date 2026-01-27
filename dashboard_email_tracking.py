@@ -608,4 +608,223 @@ def render_email_tracking():
             )
 
             with st.expander(header):
-                left, right =
+                left, right = st.columns(2)
+
+                with left:
+                    st.markdown("#### Original email sent")
+                    st.markdown(f"**Subject:** {subject}")
+                    if r.get("body_html"):
+                        cleaned_html = r["body_html"]
+                        for tag in ["<html>", "</html>", "<body>", "</body>", "<head>", "</head>"]:
+                            cleaned_html = cleaned_html.replace(tag, "")
+                        safe_html = f"""
+                        <div style="
+                            background-color: white;
+                            color: black;
+                            padding: 16px;
+                            border-radius: 10px;
+                            line-height: 1.6;
+                            font-family: Arial, sans-serif;
+                        ">
+                            {cleaned_html}
+                        </div>
+                        """
+                        st.components.v1.html(safe_html, height=450, scrolling=True)
+                    elif r.get("body_text"):
+                        st.markdown(
+                            f"""
+                            <div style="
+                                background-color: white;
+                                color: black;
+                                padding: 16px;
+                                border-radius: 10px;
+                                line-height: 1.6;
+                                font-family: Arial, sans-serif;
+                                white-space: pre-wrap;
+                            ">
+                                {r["body_text"]}
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.info("No email body stored for this message.")
+
+                with right:
+                    st.markdown("#### Reply received")
+                    st.markdown(f"**Reply subject:** {reply_subject}")
+                    reply_body = r.get("reply_body") or ""
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background-color: white;
+                            color: black;
+                            padding: 16px;
+                            border-radius: 10px;
+                            line-height: 1.6;
+                            font-family: Arial, sans-serif;
+                            white-space: pre-wrap;
+                        ">
+                            {reply_body}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+    st.markdown("---")
+
+    # Paginated table
+    st.subheader("Emails")
+    page_size = 50
+    if "email_page" not in st.session_state:
+        st.session_state.email_page = 0
+
+    offset = st.session_state.email_page * page_size
+    df_page, total = fetch_emails_paginated(
+        user_email, admin_view, start_date, end_date, template_id, limit=page_size, offset=offset
+    )
+
+    st.write(f"Showing {min(total, offset+1)}-{min(total, offset+page_size)} of {total:,} emails")
+
+    if df_page.empty:
+        st.info("No emails found for the selected filters.")
+    else:
+        display = df_page.copy()
+
+        if not display["sent_at"].empty:
+            display["sent_at"] = pd.to_datetime(display["sent_at"])
+
+        display["Opened"] = (
+            display.get("open_count", 0).fillna(0) > 0
+        ) | display.get("replied", False).fillna(False) | display.get("reply_received_at").notna()
+
+        display["Replied"] = (
+            display.get("replied", False).fillna(False)
+            | display.get("reply_received_at").notna()
+        )
+
+        display["Recipient"] = display.apply(
+            lambda r: f"{r.get('contact_name','')} (JD {int(r['recipient_jd_year'])})"
+            if pd.notna(r.get("recipient_jd_year"))
+            else r.get("contact_name", ""),
+            axis=1,
+        )
+
+        display["SF Link"] = display.apply(
+            lambda r: build_salesforce_link(r.get("contact_id"), r.get("account_id")), axis=1
+        )
+
+        display = display.rename(
+            columns={
+                "sent_at": "Sent Date",
+                "subject": "Subject",
+                "template_name": "Template",
+                "recipient_email": "Recipient Email",
+                "delivery_status": "Status",
+            }
+        )
+
+        st.markdown("### 📧 View Email Content")
+        for _, row in display.iterrows():
+            pst_time = to_pst_safe(row["Sent Date"])
+            sent_display = pst_time.strftime("%Y-%m-%d %I:%M %p") if pst_time else "(no timestamp)"
+
+            status_label = (row.get("Status") or "sent").lower()
+            if row.get("Replied", False):
+                status_label = "replied"
+            elif row.get("Opened", False):
+                status_label = "opened"
+
+            recipient_name = row.get("Recipient") or "(Unknown Recipient)"
+            company_name = row.get("company_name") or "Unknown Firm"
+            company_link = (
+                f"[{company_name}]({build_salesforce_link(None, row.get('account_id'))})"
+                if row.get("account_id")
+                else company_name
+            )
+
+            header = (
+                f"**{row['Subject']}** — {recipient_name} | {company_link}  \n"
+                f"{sent_display} | **Status:** {status_label}"
+            )
+
+            with st.expander(header):
+                # Original email
+                if row.get("body_html"):
+                    cleaned_html = row["body_html"]
+                    for tag in ["<html>", "</html>", "<body>", "</body>", "<head>", "</head>"]:
+                        cleaned_html = cleaned_html.replace(tag, "")
+                    safe_html = f"""
+                    <div style="
+                        background-color: white;
+                        color: black;
+                        padding: 16px;
+                        border-radius: 10px;
+                        line-height: 1.6;
+                        font-family: Arial, sans-serif;
+                    ">
+                        {cleaned_html}
+                    </div>
+                    """
+                    st.components.v1.html(safe_html, height=600, scrolling=True)
+                elif row.get("body_text"):
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background-color: white;
+                            color: black;
+                            padding: 16px;
+                            border-radius: 10px;
+                            line-height: 1.6;
+                            font-family: Arial, sans-serif;
+                            white-space: pre-wrap;
+                        ">
+                            {row["body_text"]}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.info("No email body stored for this message.")
+
+                # Reply (only if present + not automated)
+                reply_subject = row.get("reply_subject")
+                reply_body = row.get("reply_body")
+                if reply_subject or reply_body:
+                    if not is_automated_reply(reply_subject, reply_body):
+                        st.markdown("---")
+                        st.markdown("#### Reply received")
+                        st.markdown(f"**Reply subject:** {reply_subject or '(no reply subject)'}")
+                        st.markdown(
+                            f"""
+                            <div style="
+                                background-color: white;
+                                color: black;
+                                padding: 16px;
+                                border-radius: 10px;
+                                line-height: 1.6;
+                                font-family: Arial, sans-serif;
+                                white-space: pre-wrap;
+                            ">
+                                {reply_body or ''}
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+    # Pagination controls
+    colp1, colp2, colp3 = st.columns([1, 6, 1])
+    with colp1:
+        if st.button("Prev"):
+            if st.session_state.email_page > 0:
+                st.session_state.email_page -= 1
+                st.rerun()
+    with colp3:
+        if st.button("Next"):
+            if (offset + page_size) < total:
+                st.session_state.email_page += 1
+                st.rerun()
+
+
+if __name__ == "__main__":
+    render_email_tracking()
