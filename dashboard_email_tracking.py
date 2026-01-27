@@ -1,6 +1,8 @@
 import os
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
+import re
+
 import pytz
 import pandas as pd
 import psycopg2
@@ -11,13 +13,40 @@ import streamlit as st
 ADMIN_EMAILS = {"jack@swanlegal.com", "jenny@swanlegal.com"}
 PST = pytz.timezone("America/Los_Angeles")
 
+# Heuristic filters for automated replies
+AUTO_REPLY_PATTERNS = [
+    r"automatic reply",
+    r"\bauto\s*reply\b",
+    r"\bautoreply\b",
+    r"out of office",
+    r"\booo\b",
+    r"vacation",
+    r"away from (the )?office",
+    r"do not (monitor|check)",
+    r"\bnoreply\b",
+    r"\bno-reply\b",
+    r"mailer-daemon",
+    r"delivery status notification",
+    r"undeliverable",
+]
+
+
+def is_automated_reply(reply_subject: Optional[str], reply_body: Optional[str]) -> bool:
+    hay = f"{reply_subject or ''} {reply_body or ''}".strip().lower()
+    if not hay:
+        return True
+    for pat in AUTO_REPLY_PATTERNS:
+        if re.search(pat, hay, flags=re.IGNORECASE):
+            return True
+    return False
+
 
 def to_pst_safe(dt):
     """Convert any datetime-like value to PST safely."""
     if pd.isna(dt):
         return None
     ts = pd.to_datetime(dt, errors="coerce")
-    if ts is None:
+    if ts is None or pd.isna(ts):
         return None
     # If tz-naive, assume UTC
     if ts.tzinfo is None:
@@ -81,10 +110,8 @@ def fetch_emails_paginated(
     offset: int,
 ) -> Tuple[pd.DataFrame, int]:
     """Return paginated email rows and total count."""
-
     where_clause, base_params = _admin_where_clause(admin, recruiter_email)
 
-    # Proper WHERE clause
     date_filter = "e.sent_timestamp BETWEEN %s AND %s"
     if where_clause:
         where_sql = f"{where_clause} AND {date_filter}"
@@ -106,7 +133,7 @@ def fetch_emails_paginated(
     """
     count_params = base_params + [start_date, end_date] + template_params
 
-    # Data query – includes open/reply fields and uses sf_account_id directly
+    # Data query (NOW includes reply_subject/reply_body)
     data_sql = f"""
         SELECT
             e.sent_timestamp AS sent_at,
@@ -124,7 +151,9 @@ def fetch_emails_paginated(
             e.open_count,
             e.click_count,
             e.replied,
-            e.reply_received_at
+            e.reply_received_at,
+            e.reply_subject,
+            e.reply_body
         FROM email_sends e
         {where_sql}
         {template_filter}
@@ -151,6 +180,73 @@ def fetch_emails_paginated(
 
     df = pd.DataFrame(rows)
     return df, int(total)
+
+
+@st.cache_data(ttl=300)
+def fetch_replied_threads(
+    recruiter_email: str,
+    admin: bool,
+    start_date: datetime,
+    end_date: datetime,
+    template_id: Optional[str],
+    limit: int = 50,
+) -> pd.DataFrame:
+    """Fetch emails that have replies, excluding automated responses (heuristic)."""
+    where_clause, base_params = _admin_where_clause(admin, recruiter_email)
+
+    date_filter = "e.reply_received_at BETWEEN %s AND %s"
+    if where_clause:
+        where_sql = f"{where_clause} AND {date_filter}"
+    else:
+        where_sql = f"WHERE {date_filter}"
+
+    template_filter = ""
+    template_params: list = []
+    if template_id:
+        template_filter = " AND e.sf_template_id = %s"
+        template_params = [template_id]
+
+    # Pull candidates; filter automated in Python (more flexible)
+    sql = f"""
+        SELECT
+            e.sent_timestamp AS sent_at,
+            e.contact_name,
+            e.recipient_jd_year,
+            e.sf_email_recipient_id AS contact_id,
+            e.sf_account_id AS account_id,
+            e.company_name,
+            e.subject,
+            COALESCE(e.sf_template_name, '(None)') AS template_name,
+            COALESCE(e.recipient_email, '') AS recipient_email,
+            e.body_html,
+            e.body_text,
+            e.reply_received_at,
+            e.reply_subject,
+            e.reply_body
+        FROM email_sends e
+        {where_sql}
+          AND (e.replied IS TRUE OR e.reply_received_at IS NOT NULL)
+          AND COALESCE(e.reply_subject, '') <> ''
+          AND COALESCE(e.reply_body, '') <> ''
+          AND e.delivery_status <> 'bounced'
+        {template_filter}
+        ORDER BY e.reply_received_at DESC
+        LIMIT %s
+    """
+    params = base_params + [start_date, end_date] + template_params + [limit]
+
+    with get_db_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+
+    # exclude automated replies
+    df = df[~df.apply(lambda r: is_automated_reply(r.get("reply_subject"), r.get("reply_body")), axis=1)].copy()
+    return df
 
 
 @st.cache_data(ttl=300)
@@ -371,8 +467,6 @@ def build_salesforce_link(contact_id: Optional[str], account_id: Optional[str]) 
 
 
 def render_email_tracking():
-    # `st.set_page_config` must be called once at the top-level (in main.py).
-    # This function only renders the dashboard UI.
     st.title("Email Tracking")
 
     user_email = st.session_state.get("user_email")
@@ -380,10 +474,8 @@ def render_email_tracking():
         st.error("User not logged in (st.session_state['user_email'] missing)")
         return
 
-    # Everyone can toggle company-wide metrics now
     admin_view = st.checkbox("View company-wide metrics", value=False)
 
-    # Time window selector (quick choices) with default 14 days
     window_label = st.selectbox(
         "Time window",
         ["1 day", "7 days", "2 weeks", "30 days", "90 days", "180 days", "1 year"],
@@ -402,9 +494,7 @@ def render_email_tracking():
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
 
-    # Templates filter
     templates_df = fetch_templates(user_email, admin_view)
-    # templates_df returns columns 'name' and 'id' (or is empty)
     template_options = [("All Templates", None)]
     if not templates_df.empty:
         template_options += list(zip(templates_df.get("name", []), templates_df.get("id", [])))
@@ -429,8 +519,7 @@ def render_email_tracking():
     st.subheader("Performance by Job")
     st.markdown(
         """
-    Shows per-job performance: job name, template, last sent date, emails sent, open & reply rates,
-    and the JD year with the highest open rate and reply rate.
+    Shows per-job performance: job name, last sent date, emails sent, open & reply rates.
     """
     )
     perf_df = fetch_performance_by_job(
@@ -473,142 +562,50 @@ def render_email_tracking():
 
     st.markdown("---")
 
-    # Paginated table
-    st.subheader("Emails")
-    page_size = 50
-    if "email_page" not in st.session_state:
-        st.session_state.email_page = 0
+    # ----------------------------
+    # NEW: Emails with Replies
+    # ----------------------------
+    st.subheader("Emails with Replies (original + reply)")
+    st.caption("Automated responses are excluded.")
 
-    offset = st.session_state.email_page * page_size
-    df_page, total = fetch_emails_paginated(
-        user_email, admin_view, start_date, end_date, template_id, limit=page_size, offset=offset
+    replies_limit = st.number_input("Max reply threads to show", min_value=10, max_value=500, value=50, step=10)
+
+    replies_df = fetch_replied_threads(
+        user_email, admin_view, start_date, end_date, template_id, limit=int(replies_limit)
     )
 
-    st.write(
-        f"Showing {min(total, offset+1)}-{min(total, offset+page_size)} of {total:,} emails"
-    )
-    if df_page.empty:
-        st.info("No emails found for the selected filters.")
+    if replies_df.empty:
+        st.info("No non-automated replies found for the selected filters.")
     else:
-        display = df_page.copy()
+        for _, r in replies_df.iterrows():
+            pst_sent = to_pst_safe(r.get("sent_at"))
+            pst_reply = to_pst_safe(r.get("reply_received_at"))
 
-        # Convert sent_at to datetime
-        if not display["sent_at"].empty:
-            display["sent_at"] = pd.to_datetime(display["sent_at"])
+            sent_display = pst_sent.strftime("%Y-%m-%d %I:%M %p") if pst_sent else "(no sent time)"
+            reply_display = pst_reply.strftime("%Y-%m-%d %I:%M %p") if pst_reply else "(no reply time)"
 
-        # Opened / Replied flags from numeric/boolean fields
-        display["Opened"] = (
-            display.get("open_count", 0).fillna(0) > 0
-        ) | display.get("replied", False).fillna(False) | display.get("reply_received_at").notna()
+            recipient = r.get("contact_name") or "(Unknown Recipient)"
+            jd = r.get("recipient_jd_year")
+            if pd.notna(jd):
+                try:
+                    recipient = f"{recipient} (JD {int(jd)})"
+                except Exception:
+                    pass
 
-        display["Replied"] = (
-            display.get("replied", False).fillna(False)
-            | display.get("reply_received_at").notna()
-        )
-
-        display["Recipient"] = display.apply(
-            lambda r: f"{r.get('contact_name','')} (JD {int(r['recipient_jd_year'])})"
-            if pd.notna(r.get("recipient_jd_year"))
-            else r.get("contact_name", ""),
-            axis=1,
-        )
-
-        display["SF Link"] = display.apply(
-            lambda r: build_salesforce_link(r.get("contact_id"), r.get("account_id")), axis=1
-        )
-
-        display = display.rename(
-            columns={
-                "sent_at": "Sent Date",
-                "subject": "Subject",
-                "template_name": "Template",
-                "recipient_email": "Recipient Email",
-                "delivery_status": "Status",
-            }
-        )
-
-        st.markdown("### 📧 View Email Content")
-        for _, row in display.iterrows():
-            pst_time = to_pst_safe(row["Sent Date"])
-            sent_display = (
-                pst_time.strftime("%Y-%m-%d %I:%M %p") if pst_time else "(no timestamp)"
-            )
-
-            status_label = (row.get("Status") or "sent").lower()
-            if row.get("Replied", False):
-                status_label = "replied"
-            elif row.get("Opened", False):
-                status_label = "opened"
-
-            recipient_name = row.get("Recipient") or "(Unknown Recipient)"
-            company_name = row.get("company_name") or "Unknown Firm"
-
-            # Optional Salesforce link for company
+            company_name = r.get("company_name") or "Unknown Firm"
             company_link = (
-                f"[{company_name}]({build_salesforce_link(None, row.get('account_id'))})"
-                if row.get("account_id")
+                f"[{company_name}]({build_salesforce_link(None, r.get('account_id'))})"
+                if r.get("account_id")
                 else company_name
             )
 
-            # Header: subject, recipient, company name, timestamp, status
+            subject = r.get("subject") or "(no subject)"
+            reply_subject = r.get("reply_subject") or "(no reply subject)"
+
             header = (
-                f"**{row['Subject']}** — {recipient_name} | {company_link}  \n"
-                f"{sent_display} | **Status:** {status_label}"
+                f"**{subject}** — {recipient} | {company_link}  \n"
+                f"Sent: {sent_display} • Reply: {reply_display}"
             )
 
             with st.expander(header):
-                if row.get("body_html"):
-                    cleaned_html = row["body_html"]
-                    # Optional: remove <html>, <head>, <body> wrappers if present
-                    for tag in ["<html>", "</html>", "<body>", "</body>", "<head>", "</head>"]:
-                        cleaned_html = cleaned_html.replace(tag, "")
-                    safe_html = f"""
-                    <div style="
-                        background-color: white;
-                        color: black;
-                        padding: 16px;
-                        border-radius: 10px;
-                        line-height: 1.6;
-                        font-family: Arial, sans-serif;
-                    ">
-                        {cleaned_html}
-                    </div>
-                    """
-                    st.components.v1.html(safe_html, height=600, scrolling=True)
-
-                elif row.get("body_text"):
-                    st.markdown(
-                        f"""
-                        <div style="
-                            background-color: white;
-                            color: black;
-                            padding: 16px;
-                            border-radius: 10px;
-                            line-height: 1.6;
-                            font-family: Arial, sans-serif;
-                            white-space: pre-wrap;
-                        ">
-                            {row["body_text"]}
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.info("No email body stored for this message.")
-
-    # Pagination controls
-    colp1, colp2, colp3 = st.columns([1, 6, 1])
-    with colp1:
-        if st.button("Prev"):
-            if st.session_state.email_page > 0:
-                st.session_state.email_page -= 1
-                st.rerun()
-    with colp3:
-        if st.button("Next"):
-            if (offset + page_size) < total:
-                st.session_state.email_page += 1
-                st.rerun()
-
-
-if __name__ == "__main__":
-    render_email_tracking()
+                left, right =
